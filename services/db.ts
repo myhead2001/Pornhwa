@@ -133,6 +133,66 @@ class ManhwaDatabase extends Dexie {
     console.log("IndexedDB cleared.");
   }
 
+  // --- Mobile / Manual Backup Support ---
+
+  async exportDatabaseToJson(): Promise<string> {
+    const manhwas = await this.manhwas.toArray();
+    const scenes = await this.scenes.toArray();
+    const config = await this.config.toArray();
+    
+    // Filter out the file handle from config as it can't be serialized
+    const safeConfig = config.filter(c => c.key !== HANDLE_KEY);
+
+    const data = {
+      meta: { version: 1, exportedAt: new Date().toISOString() },
+      manhwas,
+      scenes,
+      config: safeConfig
+    };
+    return JSON.stringify(data, null, 2);
+  }
+
+  async importDatabaseFromJson(jsonStr: string) {
+    try {
+      const data = JSON.parse(jsonStr);
+      if (!data.manhwas || !data.scenes) throw new Error("Invalid backup format");
+      
+      await this.transaction('rw', this.manhwas, this.scenes, this.config, async () => {
+        await this.manhwas.clear();
+        await this.scenes.clear();
+        
+        // Sanitize Dates for Manhwas
+        const sanitizedManhwas = data.manhwas.map((m: any) => ({
+            ...m,
+            createdAt: new Date(m.createdAt),
+            lastReadAt: m.lastReadAt ? new Date(m.lastReadAt) : undefined
+        }));
+
+        // Sanitize Dates for Scenes
+        const sanitizedScenes = data.scenes.map((s: any) => ({
+            ...s,
+            createdAt: new Date(s.createdAt)
+        }));
+
+        await this.manhwas.bulkAdd(sanitizedManhwas);
+        await this.scenes.bulkAdd(sanitizedScenes);
+
+        // Import config if present (ignoring file handles)
+        if (data.config && Array.isArray(data.config)) {
+             for (const c of data.config) {
+                 if (c.key !== HANDLE_KEY) {
+                     await this.config.put(c);
+                 }
+             }
+        }
+      });
+      return true;
+    } catch (e) {
+      console.error("Import failed", e);
+      throw e;
+    }
+  }
+
   // --- File System Logic ---
 
   async restoreConnection(): Promise<boolean> {

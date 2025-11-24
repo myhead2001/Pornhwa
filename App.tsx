@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { HashRouter, Routes, Route, Link, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { 
@@ -6,7 +6,8 @@ import {
   BarChart2, Save, X, Trash2, Wand2, Filter, ChevronRight, Hash, User,
   Star, Edit2, Users, ArrowUp, ArrowDown, Calendar, Clock, SlidersHorizontal,
   FolderOpen, RefreshCw, HardDrive, CheckCircle, AlertCircle, Palette,
-  Home, Tag, Briefcase, ExternalLink, Beaker, AlertTriangle, Sparkles
+  Home, Tag, Briefcase, ExternalLink, Beaker, AlertTriangle, Sparkles,
+  Download, Upload, Smartphone, LayoutGrid, List
 } from 'lucide-react';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend 
@@ -329,6 +330,16 @@ const LibraryPage = () => {
   const [sortBy, setSortBy] = useState<'lastRead' | 'title' | 'rating' | 'added'>('lastRead');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
+  // View Mode State (Grid vs List) with Persistence
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
+    return (localStorage.getItem('library_view_mode') as 'grid' | 'list') || 'grid';
+  });
+
+  const handleViewChange = (mode: 'grid' | 'list') => {
+    setViewMode(mode);
+    localStorage.setItem('library_view_mode', mode);
+  };
+
   useEffect(() => {
     if (typeParam && valueParam) {
       if (typeParam === 'status') {
@@ -427,6 +438,25 @@ const LibraryPage = () => {
                     onChange={(e) => setSearchQuery(e.target.value)}
                 />
             </div>
+
+            {/* View Toggle */}
+            <div className="hidden sm:flex bg-slate-800 rounded-xl p-1 border border-slate-700">
+                <button
+                    onClick={() => handleViewChange('grid')}
+                    className={`p-2 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                    title="Grid View"
+                >
+                    <LayoutGrid className="w-5 h-5" />
+                </button>
+                <button
+                    onClick={() => handleViewChange('list')}
+                    className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'}`}
+                    title="List View"
+                >
+                    <List className="w-5 h-5" />
+                </button>
+            </div>
+
             <Button 
                 variant={showFilters ? "primary" : "secondary"} 
                 onClick={() => setShowFilters(!showFilters)}
@@ -522,30 +552,75 @@ const LibraryPage = () => {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-          {manhwas.map((manhwa) => (
-            <Link key={manhwa.id} to={`/manhwa/${manhwa.id}`} className="group block">
-              <Card className="h-full transition-transform group-hover:-translate-y-1 group-hover:shadow-lg hover:border-blue-500/50">
-                <div className="aspect-[2/3] relative overflow-hidden bg-slate-900">
-                  <img 
-                    src={manhwa.coverUrl} 
-                    alt={manhwa.title} 
-                    className="w-full h-full object-cover transition-opacity group-hover:opacity-90"
-                    loading="lazy"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent opacity-80" />
-                  <div className="absolute bottom-0 left-0 p-3 w-full">
-                    <h3 className="font-bold text-white truncate leading-tight mb-1">{manhwa.title}</h3>
-                    <div className="flex items-center justify-between text-xs text-slate-300">
-                      <span>{manhwa.status}</span>
-                      {manhwa.rating > 0 && <span className="flex items-center text-yellow-400 gap-0.5"><Star className="w-3 h-3 fill-current" />{manhwa.rating}</span>}
-                    </div>
-                  </div>
+        <>
+            {viewMode === 'grid' ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                {manhwas.map((manhwa) => (
+                    <Link key={manhwa.id} to={`/manhwa/${manhwa.id}`} className="group block">
+                    <Card className="h-full transition-transform group-hover:-translate-y-1 group-hover:shadow-lg hover:border-blue-500/50">
+                        <div className="aspect-[2/3] relative overflow-hidden bg-slate-900">
+                        <img 
+                            src={manhwa.coverUrl} 
+                            alt={manhwa.title} 
+                            className="w-full h-full object-cover transition-opacity group-hover:opacity-90"
+                            loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent opacity-80" />
+                        <div className="absolute bottom-0 left-0 p-3 w-full">
+                            <h3 className="font-bold text-white truncate leading-tight mb-1">{manhwa.title}</h3>
+                            <div className="flex items-center justify-between text-xs text-slate-300">
+                            <span>{manhwa.status}</span>
+                            {manhwa.rating > 0 && <span className="flex items-center text-yellow-400 gap-0.5"><Star className="w-3 h-3 fill-current" />{manhwa.rating}</span>}
+                            </div>
+                        </div>
+                        </div>
+                    </Card>
+                    </Link>
+                ))}
                 </div>
-              </Card>
-            </Link>
-          ))}
-        </div>
+            ) : (
+                <div className="flex flex-col gap-3">
+                    {manhwas.map((manhwa) => (
+                        <Link key={manhwa.id} to={`/manhwa/${manhwa.id}`} className="group block">
+                            <Card className="flex gap-4 p-3 hover:border-blue-500/50 transition-colors">
+                                <div className="w-16 h-24 flex-shrink-0 bg-slate-900 rounded-md overflow-hidden shadow-sm">
+                                    <img src={manhwa.coverUrl} alt={manhwa.title} className="w-full h-full object-cover" loading="lazy" />
+                                </div>
+                                <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                    <div className="flex justify-between items-start mb-1">
+                                        <h3 className="font-bold text-white text-lg truncate pr-2 group-hover:text-blue-400 transition-colors">{manhwa.title}</h3>
+                                        {manhwa.rating > 0 && (
+                                            <div className="flex items-center text-yellow-400 gap-1 text-xs font-bold bg-yellow-400/10 px-1.5 py-0.5 rounded border border-yellow-400/20">
+                                                <Star className="w-3 h-3 fill-current" />{manhwa.rating}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-2 mb-2 text-xs flex-wrap">
+                                         <span className={`px-1.5 py-0.5 rounded border ${
+                                            manhwa.status === 'Reading' ? 'bg-blue-900/30 text-blue-300 border-blue-800' :
+                                            manhwa.status === 'Completed' ? 'bg-green-900/30 text-green-300 border-green-800' :
+                                            manhwa.status === 'Plan to Read' ? 'bg-slate-700/30 text-slate-300 border-slate-600' :
+                                            'bg-red-900/30 text-red-300 border-red-800'
+                                         }`}>
+                                            {manhwa.status}
+                                         </span>
+                                         <span className="text-slate-600">•</span>
+                                         <span className="text-slate-400 truncate">{manhwa.author}</span>
+                                    </div>
+                                    <div className="flex gap-1 overflow-hidden mask-linear-fade">
+                                         {manhwa.tags.slice(0, 5).map(t => (
+                                             <span key={t} className="text-[10px] px-1.5 py-0.5 bg-slate-900 text-slate-400 rounded border border-slate-700 whitespace-nowrap">
+                                                {t}
+                                             </span>
+                                         ))}
+                                    </div>
+                                </div>
+                            </Card>
+                        </Link>
+                    ))}
+                </div>
+            )}
+        </>
       )}
     </div>
   );
@@ -1280,21 +1355,26 @@ const SettingsPage = () => {
   const [currentTheme, setCurrentTheme] = useState('default');
   const [isIframe, setIsIframe] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [canUseFileSystem, setCanUseFileSystem] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Check if running in iframe
+    // Check environment
     setIsIframe(window.self !== window.top);
+    setCanUseFileSystem('showDirectoryPicker' in window);
 
     const init = async () => {
-        // Connection Check
-        const hasHandle = db.hasConnection();
-        if (hasHandle) {
-             const restored = await db.requestPermission();
-             setFolderLinked(restored);
-             setStatusMsg(restored ? 'Connected' : 'Permission needed (Reload)');
-        } else {
-             const restored = await db.restoreConnection();
-             setFolderLinked(restored);
+        // Connection Check (Only relevant if FSA is supported)
+        if ('showDirectoryPicker' in window) {
+            const hasHandle = db.hasConnection();
+            if (hasHandle) {
+                 const restored = await db.requestPermission();
+                 setFolderLinked(restored);
+                 setStatusMsg(restored ? 'Connected' : 'Permission needed (Reload)');
+            } else {
+                 const restored = await db.restoreConnection();
+                 setFolderLinked(restored);
+            }
         }
 
         // Theme Load
@@ -1313,7 +1393,6 @@ const SettingsPage = () => {
        setStatusMsg("Folder Linked Successfully");
     } else {
        setStatusMsg(result.message || "Failed to link folder");
-       // Alert user if it's a specific error (like security restriction)
        if (result.message && !result.message.toLowerCase().includes('cancelled')) {
            alert(result.message);
        }
@@ -1330,17 +1409,45 @@ const SettingsPage = () => {
       }
   };
 
+  // --- Backup Handlers for Android/Mobile ---
+  const handleExportBackup = async () => {
+      try {
+          const jsonStr = await db.exportDatabaseToJson();
+          const blob = new Blob([jsonStr], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `manhwalog_backup_${new Date().toISOString().slice(0, 10)}.json`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+      } catch (e) {
+          alert("Failed to export backup");
+      }
+  };
+
+  const handleImportBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      try {
+          const text = await file.text();
+          await db.importDatabaseFromJson(text);
+          alert("Backup restored successfully!");
+          // Reset file input
+          if (fileInputRef.current) fileInputRef.current.value = '';
+      } catch (e) {
+          console.error(e);
+          alert("Failed to restore backup. Invalid file.");
+      }
+  };
+
   const changeTheme = async (themeId: string) => {
     const theme = THEMES.find(t => t.id === themeId);
     if (!theme) return;
-    
-    // Update State
     setCurrentTheme(themeId);
-    
-    // Save to DB
     await db.config.put({ key: 'app_theme', value: themeId });
-    
-    // Apply CSS Variables
     const root = document.documentElement;
     Object.entries(theme.colors).forEach(([key, value]) => {
        root.style.setProperty(key, value);
@@ -1369,7 +1476,6 @@ const SettingsPage = () => {
         <h2 className="text-xl font-semibold flex items-center gap-2"><Palette className="w-5 h-5 text-purple-400" />Appearance</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {THEMES.map((theme) => {
-              // Extract preview colors from the theme map
               const bg = `rgb(${theme.colors['--bg-800']})`;
               const accent = `rgb(${theme.colors['--p-500']})`;
               return (
@@ -1390,43 +1496,70 @@ const SettingsPage = () => {
         </div>
       </Card>
       
-      {/* Preset Manager Section */}
       <PresetManager />
 
-      {/* Data Storage Section */}
+      {/* Data Storage Section - Conditional Rendering */}
       <Card className="p-6 space-y-4">
         <h2 className="text-xl font-semibold flex items-center gap-2"><HardDrive className="w-5 h-5 text-blue-400" />Data Storage</h2>
         <div className="bg-slate-900 rounded-lg p-4 border border-slate-700">
-             <div className="flex items-center justify-between mb-4">
-                 <div className="flex items-center gap-3">
-                     <div className={`p-2 rounded-full ${folderLinked ? 'bg-green-500/20 text-green-400' : 'bg-slate-700 text-slate-400'}`}>
-                        {folderLinked ? <CheckCircle className="w-5 h-5" /> : <FolderOpen className="w-5 h-5" />}
-                     </div>
-                     <div><p className="font-medium text-white">{folderLinked ? 'Local Folder Linked' : 'Using Browser Storage'}</p><p className="text-xs text-slate-500">{folderLinked ? 'Data stored in "library" subfolder.' : 'Data is stored in browser cache only.'}</p></div>
-                 </div>
-                 {folderLinked && (<Button variant="ghost" onClick={handleReloadFromDisk} title="Reload from Disk" className="p-2"><RefreshCw className="w-4 h-4" /></Button>)}
-             </div>
-
-             {/* Iframe Warning */}
-             {isIframe && !folderLinked && (
-                 <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-3 text-red-300 text-xs mb-4">
-                    <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                    <div>
-                        <p className="font-bold mb-1">Preview Mode Detected</p>
-                        <p>Browser security blocks File System access in preview frames. To link a folder, you must open this app in a new tab.</p>
+             
+             {canUseFileSystem ? (
+                 <>
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-full ${folderLinked ? 'bg-green-500/20 text-green-400' : 'bg-slate-700 text-slate-400'}`}>
+                                {folderLinked ? <CheckCircle className="w-5 h-5" /> : <FolderOpen className="w-5 h-5" />}
+                            </div>
+                            <div><p className="font-medium text-white">{folderLinked ? 'Local Folder Linked' : 'Using Browser Storage'}</p><p className="text-xs text-slate-500">{folderLinked ? 'Data stored in "library" subfolder.' : 'Data is stored in browser cache only.'}</p></div>
+                        </div>
+                        {folderLinked && (<Button variant="ghost" onClick={handleReloadFromDisk} title="Reload from Disk" className="p-2"><RefreshCw className="w-4 h-4" /></Button>)}
                     </div>
+
+                    {isIframe && !folderLinked && (
+                        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-3 text-red-300 text-xs mb-4">
+                            <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                            <div>
+                                <p className="font-bold mb-1">Preview Mode Detected</p>
+                                <p>Browser security blocks File System access in preview frames. To link a folder, you must open this app in a new tab.</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {!folderLinked ? (
+                        <div className="space-y-3">
+                            <div className="flex gap-2 items-center bg-yellow-500/10 border border-yellow-500/20 p-3 rounded-md">
+                                <AlertCircle className="w-5 h-5 text-yellow-500 flex-shrink-0" />
+                                <p className="text-xs text-yellow-200">Linking a folder creates a <code>library</code> folder where each Manhwa is saved as a separate JSON file. You can edit these files externally.</p>
+                            </div>
+                            <Button onClick={handleLinkFolder} className="w-full" variant="secondary" disabled={isIframe}><FolderOpen className="w-4 h-4" />Link Local Folder</Button>
+                        </div>
+                    ) : (<div className="text-xs text-slate-400 text-center"><p>{statusMsg}</p></div>)}
+                 </>
+             ) : (
+                 // Mobile / Android Fallback UI
+                 <div className="space-y-4">
+                     <div className="flex items-start gap-3 p-3 bg-slate-800 rounded-lg border border-slate-700">
+                         <Smartphone className="w-6 h-6 text-blue-400 mt-1 flex-shrink-0" />
+                         <div>
+                             <h3 className="text-sm font-bold text-white mb-1">Mobile Storage Management</h3>
+                             <p className="text-xs text-slate-400">Direct folder linking is not supported on Android/iOS browsers. You can export your library as a single JSON backup and restore it later to sync changes.</p>
+                         </div>
+                     </div>
+                     <div className="grid grid-cols-2 gap-4">
+                        <Button onClick={handleExportBackup} variant="secondary" icon={Download} className="w-full">Export Backup</Button>
+                        <div className="relative">
+                            <Button variant="secondary" icon={Upload} className="w-full">Import Backup</Button>
+                            <input 
+                                ref={fileInputRef}
+                                type="file" 
+                                accept=".json" 
+                                onChange={handleImportBackup} 
+                                className="absolute inset-0 opacity-0 cursor-pointer" 
+                            />
+                        </div>
+                     </div>
                  </div>
              )}
-
-             {!folderLinked ? (
-                 <div className="space-y-3">
-                     <div className="flex gap-2 items-center bg-yellow-500/10 border border-yellow-500/20 p-3 rounded-md">
-                        <AlertCircle className="w-5 h-5 text-yellow-500 flex-shrink-0" />
-                        <p className="text-xs text-yellow-200">Linking a folder creates a <code>library</code> folder where each Manhwa is saved as a separate JSON file. You can edit these files externally.</p>
-                     </div>
-                     <Button onClick={handleLinkFolder} className="w-full" variant="secondary" disabled={isIframe}><FolderOpen className="w-4 h-4" />Link Local Folder</Button>
-                 </div>
-             ) : (<div className="text-xs text-slate-400 text-center"><p>{statusMsg}</p></div>)}
         </div>
       </Card>
 
@@ -1454,7 +1587,7 @@ const SettingsPage = () => {
          confirmText="Delete Everything"
       />
 
-      <div className="text-center text-slate-600 text-sm"><p>ManhwaLog v1.2.2 (File Per Item)</p></div>
+      <div className="text-center text-slate-600 text-sm"><p>ManhwaLog v1.2.3</p></div>
     </div>
   );
 };
