@@ -8,7 +8,7 @@ import {
   Star, Edit2, Users, ArrowUp, ArrowDown, Calendar, Clock, SlidersHorizontal,
   FolderOpen, RefreshCw, HardDrive, CheckCircle, AlertCircle, Palette,
   Home, Tag, Briefcase, ExternalLink, Beaker, AlertTriangle, Sparkles,
-  Download, Upload, Smartphone, LayoutGrid, List
+  Download, Upload, Smartphone, LayoutGrid, List, Key, FileText
 } from 'lucide-react';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend 
@@ -134,7 +134,7 @@ const THEMES = [
 
 // --- Components ---
 
-const Layout = ({ children }: { children: React.ReactNode }) => {
+const Layout = ({ children }: { children?: React.ReactNode }) => {
   const location = useLocation();
   const [isConnected, setIsConnected] = useState(false);
   
@@ -330,6 +330,7 @@ const LibraryPage = () => {
   const [minRating, setMinRating] = useState(0);
   const [sortBy, setSortBy] = useState<'lastRead' | 'title' | 'rating' | 'added'>('lastRead');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
 
   // View Mode State (Grid vs List) with Persistence
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
@@ -423,9 +424,12 @@ const LibraryPage = () => {
                 <h1 className="text-3xl font-bold text-white">Library</h1>
                 <p className="text-slate-400">Your collection</p>
             </div>
-            <Link to="/search">
-                <Button icon={Plus}>Add Manhwa</Button>
-            </Link>
+            <div className="flex gap-2">
+                <Button onClick={() => setIsManualModalOpen(true)} variant="secondary" icon={FileText} className="hidden sm:flex">Manual Entry</Button>
+                <Link to="/search">
+                    <Button icon={Plus}>Add from Dex</Button>
+                </Link>
+            </div>
         </div>
 
         <div className="flex gap-2">
@@ -549,7 +553,8 @@ const LibraryPage = () => {
           <p>No Manhwas found matching your criteria.</p>
           <div className="flex gap-4 mt-4">
             <Button variant="ghost" onClick={clearFilters} className="text-blue-400">Clear Filters</Button>
-            <Link to="/settings"><Button variant="secondary" className="text-xs">Go to Settings to Load Demo Data</Button></Link>
+            <Button variant="secondary" onClick={() => setIsManualModalOpen(true)}>Add Manually</Button>
+            <Link to="/settings"><Button variant="ghost" className="text-xs">Load Demo Data</Button></Link>
           </div>
         </div>
       ) : (
@@ -623,6 +628,21 @@ const LibraryPage = () => {
             )}
         </>
       )}
+
+      {isManualModalOpen && (
+        <ManhwaMetadataModal 
+          onClose={() => setIsManualModalOpen(false)}
+          onSubmit={async (data) => {
+             const id = await db.addManhwa({
+                ...data,
+                dexId: `manual-${Date.now()}`,
+                createdAt: new Date(),
+                lastReadAt: new Date()
+             });
+             navigate(`/manhwa/${id}`);
+          }}
+        />
+      )}
     </div>
   );
 };
@@ -631,6 +651,7 @@ const SearchPage = () => {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<MangaDexResult[]>([]);
     const [loading, setLoading] = useState(false);
+    const [isManualModalOpen, setIsManualModalOpen] = useState(false);
     const navigate = useNavigate();
 
     const search = async (e: React.FormEvent) => {
@@ -666,7 +687,11 @@ const SearchPage = () => {
 
     return (
         <div className="space-y-6">
-            <h1 className="text-2xl font-bold">Search MangaDex</h1>
+            <div className="flex justify-between items-center">
+                <h1 className="text-2xl font-bold">Search MangaDex</h1>
+                <Button variant="secondary" onClick={() => setIsManualModalOpen(true)} icon={FileText}>Manual Entry</Button>
+            </div>
+            
             <form onSubmit={search} className="flex gap-2">
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
@@ -695,6 +720,21 @@ const SearchPage = () => {
                     </Card>
                 ))}
             </div>
+
+            {isManualModalOpen && (
+                <ManhwaMetadataModal 
+                  onClose={() => setIsManualModalOpen(false)}
+                  onSubmit={async (data) => {
+                     const id = await db.addManhwa({
+                        ...data,
+                        dexId: `manual-${Date.now()}`,
+                        createdAt: new Date(),
+                        lastReadAt: new Date()
+                     });
+                     navigate(`/manhwa/${id}`);
+                  }}
+                />
+            )}
         </div>
     );
 };
@@ -706,6 +746,7 @@ const ManhwaDetailPage = () => {
     
     // UI States
     const [sceneFormOpen, setSceneFormOpen] = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     
     // Scene Form States
     const [chapter, setChapter] = useState('');
@@ -742,7 +783,7 @@ const ManhwaDetailPage = () => {
             const desc = await generateSceneDescription(manhwa.title, Number(chapter), context);
             setDescription(desc);
         } catch(e) {
-            alert("Generation failed");
+            alert("Generation failed. Check API Key.");
         } finally {
             setGenerating(false);
         }
@@ -773,6 +814,7 @@ const ManhwaDetailPage = () => {
                     <div className="flex justify-between items-start">
                         <h1 className="text-4xl font-bold">{manhwa.title}</h1>
                         <div className="flex gap-2">
+                             <Button variant="secondary" icon={Edit2} onClick={() => setIsEditModalOpen(true)} />
                              <Button variant="ghost" icon={Trash2} onClick={handleDelete} className="text-red-400" />
                         </div>
                     </div>
@@ -855,6 +897,134 @@ const ManhwaDetailPage = () => {
                         </button>
                     </Card>
                 ))}
+            </div>
+
+            {isEditModalOpen && (
+                <ManhwaMetadataModal
+                    initialData={manhwa}
+                    onClose={() => setIsEditModalOpen(false)}
+                    onSubmit={async (data) => {
+                        await db.manhwas.update(manhwaId, data);
+                        setIsEditModalOpen(false);
+                    }}
+                />
+            )}
+        </div>
+    );
+};
+
+const ManhwaMetadataModal = ({ initialData, onClose, onSubmit }: { initialData?: Manhwa, onClose: () => void, onSubmit: (data: Omit<Manhwa, 'id'>) => Promise<void> }) => {
+    const [title, setTitle] = useState(initialData?.title || '');
+    const [altTitles, setAltTitles] = useState(initialData?.alternativeTitles?.join(', ') || '');
+    const [coverUrl, setCoverUrl] = useState(initialData?.coverUrl || '');
+    const [staff, setStaff] = useState(initialData?.staff?.join(', ') || initialData?.author || '');
+    const [status, setStatus] = useState<Manhwa['status']>(initialData?.status || 'Reading');
+    const [rating, setRating] = useState(initialData?.rating || 0);
+    const [tags, setTags] = useState(initialData?.tags?.join(', ') || '');
+
+    // Fetch Presets
+    const presetTags = useLiveQuery(async () => {
+      const rec = await db.config.get('preset_tags');
+      return (rec?.value as string[]) || [];
+    });
+    
+    const presetStaff = useLiveQuery(async () => {
+      const rec = await db.config.get('preset_staff');
+      return (rec?.value as string[]) || [];
+    });
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        const staffList = staff.split(',').map(s => s.trim()).filter(Boolean);
+        onSubmit({
+            title,
+            alternativeTitles: altTitles.split(',').map(s => s.trim()).filter(Boolean),
+            coverUrl: coverUrl || 'https://picsum.photos/300/450',
+            staff: staffList,
+            author: staffList[0] || 'Unknown',
+            status,
+            rating,
+            tags: tags.split(',').map(s => s.trim()).filter(Boolean),
+            dexId: initialData?.dexId || '',
+            createdAt: initialData?.createdAt || new Date(),
+            lastReadAt: initialData?.lastReadAt || new Date()
+        });
+    };
+
+    const appendValue = (current: string, setFunc: (s: string) => void, val: string) => {
+        if (!current) {
+            setFunc(val);
+        } else if (!current.toLowerCase().includes(val.toLowerCase())) {
+            setFunc(`${current}, ${val}`);
+        }
+    };
+
+    // Auto-Populate Tags from Scenes
+    const handleSyncTagsFromScenes = async () => {
+        if (!initialData?.id) return;
+        const scenes = await db.scenes.where('manhwaId').equals(initialData.id).toArray();
+        const sceneTags = new Set<string>();
+        scenes.forEach(s => s.tags.forEach(t => sceneTags.add(t)));
+        
+        // Merge with current input
+        const currentTags = tags.split(',').map(t => t.trim()).filter(Boolean);
+        const merged = Array.from(new Set([...currentTags, ...sceneTags]));
+        setTags(merged.join(', '));
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-slate-800 w-full max-w-lg rounded-2xl border border-slate-700 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+                <div className="p-6 border-b border-slate-700 flex justify-between items-center bg-slate-850">
+                    <h2 className="text-xl font-bold text-white">{initialData ? 'Edit Details' : 'Add Manhwa Manually'}</h2>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white"><X className="w-6 h-6" /></button>
+                </div>
+                <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto custom-scrollbar">
+                    <div><label className="block text-sm text-slate-400 mb-1">Title <span className="text-red-400">*</span></label><input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white" required value={title} onChange={e => setTitle(e.target.value)} /></div>
+                    <div><label className="block text-sm text-slate-400 mb-1">Alternate Titles (comma separated)</label><input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" value={altTitles} onChange={e => setAltTitles(e.target.value)} placeholder="Korean Title, etc." /></div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div><label className="block text-sm text-slate-400 mb-1">Status</label><select className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white" value={status} onChange={e => setStatus(e.target.value as any)}><option value="Reading">Reading</option><option value="Plan to Read">Plan to Read</option><option value="Completed">Completed</option><option value="Dropped">Dropped</option></select></div>
+                        <div><label className="block text-sm text-slate-400 mb-1">Rating (0-5)</label><div className="flex items-center gap-2 h-10">{[1,2,3,4,5].map(v => (<button type="button" key={v} onClick={() => setRating(v)} className="focus:outline-none"><Star className={`w-6 h-6 ${rating >= v ? 'fill-yellow-400 text-yellow-400' : 'text-slate-600'}`} /></button>))}</div></div>
+                    </div>
+                    
+                    {/* Staff Input with Presets */}
+                    <div>
+                        <label className="block text-sm text-slate-400 mb-1">Staff / Authors (comma separated)</label>
+                        <input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" value={staff} onChange={e => setStaff(e.target.value)} placeholder="Author, Artist" />
+                        {presetStaff && presetStaff.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                                <span className="text-[10px] text-slate-500 mr-1">Quick Add:</span>
+                                {presetStaff.map(p => (
+                                    <button type="button" key={p} onClick={() => appendValue(staff, setStaff, p)} className="text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-blue-600 hover:text-white transition-colors">{p}</button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Tags Input with Presets */}
+                    <div>
+                        <div className="flex justify-between items-end mb-1">
+                            <label className="block text-sm text-slate-400">Tags (comma separated)</label>
+                            {initialData?.id && (
+                                <button type="button" onClick={handleSyncTagsFromScenes} className="flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300">
+                                    <RefreshCw className="w-3 h-3" /> Sync from Scenes
+                                </button>
+                            )}
+                        </div>
+                        <input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" value={tags} onChange={e => setTags(e.target.value)} placeholder="Action, Fantasy, System" />
+                        {presetTags && presetTags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                                <span className="text-[10px] text-slate-500 mr-1">Quick Add:</span>
+                                {presetTags.map(p => (
+                                    <button type="button" key={p} onClick={() => appendValue(tags, setTags, p)} className="text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-blue-600 hover:text-white transition-colors">{p}</button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    
+                    <div><label className="block text-sm text-slate-400 mb-1">Cover Image URL</label><input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" value={coverUrl} onChange={e => setCoverUrl(e.target.value)} placeholder="https://..." /><p className="text-[10px] text-slate-500 mt-1">Leave empty for random placeholder.</p></div>
+                    <div className="pt-4 flex justify-end gap-3 border-t border-slate-700 mt-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" className="w-32">{initialData ? 'Save Changes' : 'Add Manhwa'}</Button></div>
+                </form>
             </div>
         </div>
     );
@@ -953,7 +1123,7 @@ const AnalyticsPage = () => {
 };
 
 const generateDemoData = async () => {
-    await db.transaction('rw', db.manhwas, db.scenes, async () => {
+    await (db as any).transaction('rw', db.manhwas, db.scenes, async () => {
         const mId = await db.manhwas.add({
             title: 'Solo Leveling',
             author: 'Chu-Gong',
@@ -1080,6 +1250,7 @@ const SettingsPage = () => {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [canUseFileSystem, setCanUseFileSystem] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [userApiKey, setUserApiKey] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -1101,9 +1272,12 @@ const SettingsPage = () => {
             }
         }
 
-        // Theme Load
+        // Theme & API Key Load
         const themeRec = await db.config.get('app_theme');
         if (themeRec) setCurrentTheme(themeRec.value);
+        
+        const apiKeyRec = await db.config.get('user_api_key');
+        if (apiKeyRec) setUserApiKey(apiKeyRec.value);
     };
     init();
 
@@ -1199,6 +1373,11 @@ const SettingsPage = () => {
        root.style.setProperty(key, value);
     });
   };
+  
+  const saveApiKey = async () => {
+      await db.config.put({ key: 'user_api_key', value: userApiKey.trim() });
+      alert("API Key saved.");
+  };
 
   const confirmClearDatabase = async () => {
       try {
@@ -1234,6 +1413,24 @@ const SettingsPage = () => {
           </div>
         )}
       </div>
+      
+      {/* API Key Section */}
+      <Card className="p-6 space-y-4">
+        <h2 className="text-xl font-semibold flex items-center gap-2"><Key className="w-5 h-5 text-yellow-400" />Gemini API Key</h2>
+        <p className="text-xs text-slate-400">
+            Override the default API key with your own. Required for standalone/offline usage if env vars are missing.
+        </p>
+        <div className="flex gap-2">
+            <input 
+                type="password"
+                value={userApiKey} 
+                onChange={e => setUserApiKey(e.target.value)}
+                placeholder="Paste your Gemini API Key here" 
+                className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white flex-1"
+            />
+            <Button onClick={saveApiKey} variant="secondary">Save</Button>
+        </div>
+      </Card>
       
       {/* Theme Section */}
       <Card className="p-6 space-y-4">

@@ -1,12 +1,32 @@
+
 import { GoogleGenAI } from "@google/genai";
+import { db } from './db';
+
+const getApiKey = async (): Promise<string> => {
+    // 1. Try User Setting first (for standalone PWA usage)
+    try {
+        const record = await db.config.get('user_api_key');
+        if (record && record.value) return record.value;
+    } catch (e) {
+        console.warn("Failed to read user_api_key", e);
+    }
+
+    // 2. Fallback to Env Var (for hosted/dev)
+    return process.env.API_KEY || '';
+};
 
 export const generateSceneDescription = async (
   manhwaTitle: string,
   chapter: number,
   keywords: string
 ): Promise<string> => {
-  // Use process.env.API_KEY directly as per SDK guidelines
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = await getApiKey();
+  
+  if (!apiKey) {
+      throw new Error("API Key missing. Please set it in Settings.");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   
   const prompt = `
     You are an assistant for a Manhwa reader. 
@@ -30,8 +50,13 @@ export const generateSceneDescription = async (
 export const analyzeReadingHabits = async (
   readHistory: string[]
 ): Promise<string> => {
-    // Use process.env.API_KEY directly as per SDK guidelines
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const apiKey = await getApiKey();
+
+    if (!apiKey) {
+        return "Please configure API Key in Settings to use AI features.";
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
     const prompt = `
       Based on the following list of Manhwa titles and tags I've read: 
       ${readHistory.join(", ")}.

@@ -83,7 +83,7 @@ class ManhwaDatabase extends Dexie {
       console.log("Attempting to delete manhwa:", id);
       // Deleting from DB will trigger the hook which attempts to delete from disk.
       // However, we perform the DB operations in a transaction to ensure consistency.
-      await this.transaction('rw', this.manhwas, this.scenes, async () => {
+      await (this as any).transaction('rw', this.manhwas, this.scenes, async () => {
           await this.scenes.where('manhwaId').equals(id).delete();
           await this.manhwas.delete(id);
       });
@@ -126,7 +126,7 @@ class ManhwaDatabase extends Dexie {
     }
 
     // 2. Clear DB
-    await this.transaction('rw', this.manhwas, this.scenes, async () => {
+    await (this as any).transaction('rw', this.manhwas, this.scenes, async () => {
         await this.manhwas.clear();
         await this.scenes.clear();
     });
@@ -157,7 +157,7 @@ class ManhwaDatabase extends Dexie {
       const data = JSON.parse(jsonStr);
       if (!data.manhwas || !data.scenes) throw new Error("Invalid backup format");
       
-      await this.transaction('rw', this.manhwas, this.scenes, this.config, async () => {
+      await (this as any).transaction('rw', this.manhwas, this.scenes, this.config, async () => {
         await this.manhwas.clear();
         await this.scenes.clear();
         
@@ -328,7 +328,7 @@ class ManhwaDatabase extends Dexie {
     }
 
     // Bulk update Dexie
-    await this.transaction('rw', this.manhwas, this.scenes, async () => {
+    await (this as any).transaction('rw', this.manhwas, this.scenes, async () => {
         await this.manhwas.clear();
         await this.scenes.clear();
         if (allManhwas.length) await this.manhwas.bulkAdd(allManhwas);
