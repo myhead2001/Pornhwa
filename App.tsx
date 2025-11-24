@@ -979,15 +979,95 @@ const generateDemoData = async () => {
 };
 
 const PresetManager = () => {
+    const [newTag, setNewTag] = useState('');
+    const [newStaff, setNewStaff] = useState('');
+
+    const presetTags = useLiveQuery(async () => {
+        const rec = await db.config.get('preset_tags');
+        return (rec?.value as string[]) || [];
+    }) || [];
+
+    const presetStaff = useLiveQuery(async () => {
+        const rec = await db.config.get('preset_staff');
+        return (rec?.value as string[]) || [];
+    }) || [];
+
+    const addPreset = async (type: 'preset_tags' | 'preset_staff', val: string, current: string[]) => {
+        if (!val.trim()) return;
+        const updated = [...new Set([...current, val.trim()])].sort();
+        await db.config.put({ key: type, value: updated });
+    };
+
+    const removePreset = async (type: 'preset_tags' | 'preset_staff', val: string, current: string[]) => {
+        const updated = current.filter(i => i !== val);
+        await db.config.put({ key: type, value: updated });
+    };
+
     return (
-        <Card className="p-6 space-y-4">
-             <h2 className="text-xl font-semibold flex items-center gap-2"><Sparkles className="w-5 h-5 text-purple-400" />AI Configuration</h2>
-             <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
-                <p className="text-sm text-slate-400">
-                    AI features are enabled using the API Key from environment variables.
-                    Uses <strong>gemini-2.5-flash</strong> for fast text generation.
+        <Card className="p-6 space-y-6">
+            <h2 className="text-xl font-semibold flex items-center gap-2"><SlidersHorizontal className="w-5 h-5 text-blue-400" />Global Presets</h2>
+            
+            {/* Tags */}
+            <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-400 uppercase flex items-center gap-2"><Tag className="w-4 h-4"/> Tags</label>
+                <div className="flex gap-2">
+                    <input 
+                        value={newTag} 
+                        onChange={e => setNewTag(e.target.value)}
+                        onKeyDown={e => {
+                            if(e.key === 'Enter') {
+                                addPreset('preset_tags', newTag, presetTags);
+                                setNewTag('');
+                            }
+                        }}
+                        placeholder="Add new tag (e.g. System)" 
+                        className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white flex-1"
+                    />
+                    <Button onClick={() => { addPreset('preset_tags', newTag, presetTags); setNewTag(''); }} icon={Plus} variant="secondary">Add</Button>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-2">
+                    {presetTags.map(t => (
+                        <Badge key={t} onRemove={() => removePreset('preset_tags', t, presetTags)} color="bg-slate-700 text-slate-300">{t}</Badge>
+                    ))}
+                    {presetTags.length === 0 && <span className="text-xs text-slate-600 italic">No global tags defined.</span>}
+                </div>
+            </div>
+
+            <div className="w-full h-px bg-slate-700/50"></div>
+
+            {/* Staff */}
+            <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-400 uppercase flex items-center gap-2"><Users className="w-4 h-4"/> Staff / Authors</label>
+                <div className="flex gap-2">
+                    <input 
+                        value={newStaff} 
+                        onChange={e => setNewStaff(e.target.value)}
+                        onKeyDown={e => {
+                             if(e.key === 'Enter') {
+                                addPreset('preset_staff', newStaff, presetStaff);
+                                setNewStaff('');
+                            }
+                        }}
+                        placeholder="Add new staff (e.g. Redice Studio)" 
+                        className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white flex-1"
+                    />
+                    <Button onClick={() => { addPreset('preset_staff', newStaff, presetStaff); setNewStaff(''); }} icon={Plus} variant="secondary">Add</Button>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-2">
+                    {presetStaff.map(s => (
+                        <Badge key={s} onRemove={() => removePreset('preset_staff', s, presetStaff)} color="bg-slate-700 text-slate-300">{s}</Badge>
+                    ))}
+                    {presetStaff.length === 0 && <span className="text-xs text-slate-600 italic">No global staff defined.</span>}
+                </div>
+            </div>
+            
+            <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700 mt-4">
+                 <h3 className="text-sm font-bold text-purple-400 mb-1 flex items-center gap-2"><Sparkles className="w-4 h-4"/> AI Configuration</h3>
+                 <p className="text-xs text-slate-400">
+                    AI features (Scene Generation, Taste Analysis) are enabled via the environment API Key.
+                    Current Model: <strong>gemini-2.5-flash</strong>
                 </p>
-             </div>
+            </div>
         </Card>
     );
 };
