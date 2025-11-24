@@ -6,7 +6,7 @@ import {
   BarChart2, Save, X, Trash2, Wand2, Filter, ChevronRight, Hash, User,
   Star, Edit2, Users, ArrowUp, ArrowDown, Calendar, Clock, SlidersHorizontal,
   FolderOpen, RefreshCw, HardDrive, CheckCircle, AlertCircle, Palette,
-  Home, Tag, Briefcase, ExternalLink, Beaker, AlertTriangle
+  Home, Tag, Briefcase, ExternalLink, Beaker, AlertTriangle, Sparkles
 } from 'lucide-react';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend 
@@ -871,6 +871,19 @@ const ManhwaMetadataModal = ({ initialData, onClose, onSubmit }: { initialData?:
         }
     };
 
+    // Auto-Populate Tags from Scenes
+    const handleSyncTagsFromScenes = async () => {
+        if (!initialData?.id) return;
+        const scenes = await db.scenes.where('manhwaId').equals(initialData.id).toArray();
+        const sceneTags = new Set<string>();
+        scenes.forEach(s => s.tags.forEach(t => sceneTags.add(t)));
+        
+        // Merge with current input
+        const currentTags = tags.split(',').map(t => t.trim()).filter(Boolean);
+        const merged = Array.from(new Set([...currentTags, ...sceneTags]));
+        setTags(merged.join(', '));
+    };
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-slate-800 w-full max-w-lg rounded-2xl border border-slate-700 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
@@ -902,7 +915,14 @@ const ManhwaMetadataModal = ({ initialData, onClose, onSubmit }: { initialData?:
 
                     {/* Tags Input with Presets */}
                     <div>
-                        <label className="block text-sm text-slate-400 mb-1">Tags (comma separated)</label>
+                        <div className="flex justify-between items-end mb-1">
+                            <label className="block text-sm text-slate-400">Tags (comma separated)</label>
+                            {initialData?.id && (
+                                <button type="button" onClick={handleSyncTagsFromScenes} className="flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300">
+                                    <RefreshCw className="w-3 h-3" /> Sync from Scenes
+                                </button>
+                            )}
+                        </div>
                         <input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" value={tags} onChange={e => setTags(e.target.value)} placeholder="Action, Fantasy, System" />
                         {presetTags && presetTags.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-2">
@@ -935,6 +955,15 @@ const SceneFormModal = ({ manhwa, sceneToEdit, onClose }: { manhwa: Manhwa, scen
     return (rec?.value as string[]) || [];
   }, []);
 
+  // Fetch characters existing in other scenes of THIS manhwa
+  const existingCharacters = useLiveQuery(async () => {
+    if (!manhwa.id) return [];
+    const scenes = await db.scenes.where('manhwaId').equals(manhwa.id).toArray();
+    const uniqueChars = new Set<string>();
+    scenes.forEach(s => s.characters.forEach(c => uniqueChars.add(c)));
+    return Array.from(uniqueChars).sort();
+  }, [manhwa.id]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const sceneData = {
@@ -963,16 +992,15 @@ const SceneFormModal = ({ manhwa, sceneToEdit, onClose }: { manhwa: Manhwa, scen
     }
   };
 
-  const appendTag = (tag: string) => {
-    if (!tags) {
-        setTags(tag);
-    } else {
-        // Simple check to avoid exact duplicates
-        const currentTags = tags.split(',').map(t => t.trim().toLowerCase());
-        if (!currentTags.includes(tag.toLowerCase())) {
-            setTags(`${tags}, ${tag}`);
-        }
-    }
+  const appendValue = (current: string, setFunc: (s: string) => void, val: string) => {
+      if (!current) {
+          setFunc(val);
+      } else {
+          const currentArr = current.split(',').map(t => t.trim().toLowerCase());
+          if (!currentArr.includes(val.toLowerCase())) {
+              setFunc(`${current}, ${val}`);
+          }
+      }
   };
 
   return (
@@ -985,7 +1013,19 @@ const SceneFormModal = ({ manhwa, sceneToEdit, onClose }: { manhwa: Manhwa, scen
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div><label className="block text-sm text-slate-400 mb-1">Chapter Number</label><input type="number" required className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white" value={chapter} onChange={e => setChapter(Number(e.target.value))} /></div>
           <div><div className="flex justify-between mb-1"><label className="block text-sm text-slate-400">Description</label><button type="button" onClick={handleAiGenerate} disabled={aiLoading} className="text-xs flex items-center gap-1 text-blue-400 hover:text-blue-300 disabled:opacity-50"><Wand2 className="w-3 h-3" />{aiLoading ? 'Magic...' : 'AI Enhance'}</button></div><textarea rows={4} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" placeholder="What happened? E.g. 'Jin-Woo summons Igris for the first time...'" value={desc} onChange={e => setDesc(e.target.value)} /></div>
-          <div><label className="block text-sm text-slate-400 mb-1">Characters (comma separated)</label><input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" placeholder="e.g. Jin-Woo, Cha Hae-In" value={chars} onChange={e => setChars(e.target.value)} /></div>
+          
+          <div>
+            <label className="block text-sm text-slate-400 mb-1">Characters (comma separated)</label>
+            <input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" placeholder="e.g. Jin-Woo, Cha Hae-In" value={chars} onChange={e => setChars(e.target.value)} />
+            {existingCharacters && existingCharacters.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                    <span className="text-[10px] text-slate-500 mr-1">Quick Add:</span>
+                    {existingCharacters.map(c => (
+                        <button type="button" key={c} onClick={() => appendValue(chars, setChars, c)} className="text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-blue-600 hover:text-white transition-colors">{c}</button>
+                    ))}
+                </div>
+            )}
+          </div>
           
           <div>
             <label className="block text-sm text-slate-400 mb-1">Tags (comma separated)</label>
@@ -994,7 +1034,7 @@ const SceneFormModal = ({ manhwa, sceneToEdit, onClose }: { manhwa: Manhwa, scen
                 <div className="flex flex-wrap gap-1 mt-2">
                     <span className="text-[10px] text-slate-500 mr-1">Quick Add:</span>
                     {presetTags.map(p => (
-                        <button type="button" key={p} onClick={() => appendTag(p)} className="text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-blue-600 hover:text-white transition-colors">{p}</button>
+                        <button type="button" key={p} onClick={() => appendValue(tags, setTags, p)} className="text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-blue-600 hover:text-white transition-colors">{p}</button>
                     ))}
                 </div>
             )}
