@@ -5,7 +5,8 @@ import {
   Library, Search, Plus, BookOpen, Settings as SettingsIcon, 
   BarChart2, Save, X, Trash2, Wand2, Filter, ChevronRight, Hash, User,
   Star, Edit2, Users, ArrowUp, ArrowDown, Calendar, Clock, SlidersHorizontal,
-  FolderOpen, RefreshCw, HardDrive, CheckCircle, AlertCircle, Palette
+  FolderOpen, RefreshCw, HardDrive, CheckCircle, AlertCircle, Palette,
+  Home
 } from 'lucide-react';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend 
@@ -163,7 +164,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const navItems = [
-    { icon: Library, label: 'Library', path: '/' },
+    { icon: Home, label: 'Home', path: '/' },
     { icon: Search, label: 'Add New', path: '/search' },
     { icon: BarChart2, label: 'Analytics', path: '/analytics' },
     { icon: SettingsIcon, label: 'Settings', path: '/settings' },
@@ -173,11 +174,11 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     <div className="min-h-screen bg-slate-900 text-slate-100 pb-20 md:pb-0 md:pl-20 transition-colors duration-300">
       {/* Sidebar for Desktop */}
       <nav className="hidden md:flex fixed left-0 top-0 h-full w-20 flex-col items-center bg-slate-800 border-r border-slate-700 py-6 space-y-8 z-50">
-        <div className="p-2 bg-blue-600 rounded-lg relative group">
+        <Link to="/" className="p-2 bg-blue-600 rounded-lg relative group transition-transform hover:scale-105 hover:bg-blue-500">
           <BookOpen className="w-6 h-6 text-white" />
           {/* Status Indicator */}
           <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-slate-800 ${isConnected ? 'bg-green-500' : 'bg-slate-500'}`} title={isConnected ? "Linked to Local Folder" : "Local Storage Only (Not Linked)"}></div>
-        </div>
+        </Link>
         {navItems.map((item) => (
           <Link 
             key={item.path} 
