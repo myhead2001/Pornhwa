@@ -96,8 +96,14 @@ class ManhwaDatabase extends Dexie {
       const record = await this.config.get(HANDLE_KEY);
       if (record && record.value) {
         this.directoryHandle = record.value as FileSystemDirectoryHandle;
-        const perm = await (this.directoryHandle as any).queryPermission({ mode: 'readwrite' });
-        return perm === 'granted';
+        try {
+            // Check permission query safely
+            const perm = await (this.directoryHandle as any).queryPermission({ mode: 'readwrite' });
+            return perm === 'granted';
+        } catch (e) {
+            console.warn("Error querying permission during restore", e);
+            return false;
+        }
       }
     } catch (e) {
       console.error("Failed to restore handle", e);
@@ -105,8 +111,12 @@ class ManhwaDatabase extends Dexie {
     return false;
   }
 
-  async connectToFolder() {
+  async connectToFolder(): Promise<{ success: boolean; message?: string }> {
     try {
+      if (!('showDirectoryPicker' in window)) {
+         return { success: false, message: "Your browser does not support the File System Access API." };
+      }
+
       // @ts-ignore
       const handle = await window.showDirectoryPicker({
         id: 'manhwalog-data',
@@ -118,17 +128,30 @@ class ManhwaDatabase extends Dexie {
       
       // Initial Load: Import all JSONs from the folder
       await this.syncFromDisk();
-      return true;
-    } catch (e) {
+      return { success: true };
+    } catch (e: any) {
       console.error("Error connecting to folder:", e);
-      return false;
+      let msg = "Unknown error occurred.";
+      if (e.name === 'AbortError') {
+         msg = "User cancelled folder selection.";
+      } else if (e.message && e.message.includes('Cross origin sub frames')) {
+         msg = "Security Error: You are viewing this app in a preview frame. Please Open in New Tab to enable file system access.";
+      } else if (e.message) {
+         msg = e.message;
+      }
+      return { success: false, message: msg };
     }
   }
 
   async requestPermission(): Promise<boolean> {
     if (!this.directoryHandle) return false;
-    const perm = await (this.directoryHandle as any).requestPermission({ mode: 'readwrite' });
-    return perm === 'granted';
+    try {
+        const perm = await (this.directoryHandle as any).requestPermission({ mode: 'readwrite' });
+        return perm === 'granted';
+    } catch (e) {
+        console.error("Permission request failed", e);
+        return false;
+    }
   }
 
   hasConnection(): boolean {
@@ -139,8 +162,13 @@ class ManhwaDatabase extends Dexie {
 
   private async getLibraryHandle(): Promise<FileSystemDirectoryHandle | null> {
       if (!this.directoryHandle) return null;
-      // Get or create 'library' subdirectory
-      return await this.directoryHandle.getDirectoryHandle('library', { create: true });
+      try {
+        // Get or create 'library' subdirectory
+        return await this.directoryHandle.getDirectoryHandle('library', { create: true });
+      } catch (e) {
+        console.error("Failed to get library handle", e);
+        return null;
+      }
   }
 
   private sanitizeFilename(id: number, title: string): string {
@@ -227,11 +255,6 @@ class ManhwaDatabase extends Dexie {
           };
 
           // Determine Filename
-          // We need to check if an old filename exists (e.g. if title changed)
-          // For simplicity in this version, we just write to the ID_Title.json
-          // Ideally we would clean up old files with same ID but different title, 
-          // but that requires scanning. We will do a scan for cleanup.
-          
           const filename = this.sanitizeFilename(manhwaId, manhwa.title);
           
           // Cleanup: Find any other files starting with "{id}_" and remove them to prevent duplicates

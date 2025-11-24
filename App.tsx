@@ -6,7 +6,7 @@ import {
   BarChart2, Save, X, Trash2, Wand2, Filter, ChevronRight, Hash, User,
   Star, Edit2, Users, ArrowUp, ArrowDown, Calendar, Clock, SlidersHorizontal,
   FolderOpen, RefreshCw, HardDrive, CheckCircle, AlertCircle, Palette,
-  Home
+  Home, Tag, Briefcase, ExternalLink
 } from 'lucide-react';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend 
@@ -223,7 +223,8 @@ const Badge: React.FC<{
   color?: string; 
   onClick?: (e: React.MouseEvent) => void; 
   title?: string;
-}> = ({ children, color = 'bg-slate-700 text-slate-300', onClick, title }) => (
+  onRemove?: () => void;
+}> = ({ children, color = 'bg-slate-700 text-slate-300', onClick, title, onRemove }) => (
   <span 
     title={title}
     onClick={(e) => {
@@ -233,9 +234,14 @@ const Badge: React.FC<{
         onClick(e);
       }
     }}
-    className={`px-2 py-1 rounded-md text-xs font-medium ${color} ${onClick ? 'cursor-pointer hover:opacity-80 hover:ring-1 hover:ring-white/20 transition-all' : ''}`}
+    className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium ${color} ${onClick ? 'cursor-pointer hover:opacity-80 hover:ring-1 hover:ring-white/20 transition-all' : ''}`}
   >
     {children}
+    {onRemove && (
+      <button onClick={(e) => { e.stopPropagation(); onRemove(); }} className="hover:text-red-400">
+        <X className="w-3 h-3" />
+      </button>
+    )}
   </span>
 );
 
@@ -775,6 +781,17 @@ const ManhwaMetadataModal = ({ initialData, onClose, onSubmit }: { initialData?:
     const [rating, setRating] = useState(initialData?.rating || 0);
     const [tags, setTags] = useState(initialData?.tags?.join(', ') || '');
 
+    // Fetch Presets
+    const presetTags = useLiveQuery(async () => {
+      const rec = await db.config.get('preset_tags');
+      return (rec?.value as string[]) || [];
+    });
+    
+    const presetStaff = useLiveQuery(async () => {
+      const rec = await db.config.get('preset_staff');
+      return (rec?.value as string[]) || [];
+    });
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         const staffList = staff.split(',').map(s => s.trim()).filter(Boolean);
@@ -793,6 +810,14 @@ const ManhwaMetadataModal = ({ initialData, onClose, onSubmit }: { initialData?:
         });
     };
 
+    const appendValue = (current: string, setFunc: (s: string) => void, val: string) => {
+        if (!current) {
+            setFunc(val);
+        } else if (!current.toLowerCase().includes(val.toLowerCase())) {
+            setFunc(`${current}, ${val}`);
+        }
+    };
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-slate-800 w-full max-w-lg rounded-2xl border border-slate-700 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
@@ -800,15 +825,42 @@ const ManhwaMetadataModal = ({ initialData, onClose, onSubmit }: { initialData?:
                     <h2 className="text-xl font-bold text-white">{initialData ? 'Edit Details' : 'Add Manhwa Manually'}</h2>
                     <button onClick={onClose} className="text-slate-400 hover:text-white"><X className="w-6 h-6" /></button>
                 </div>
-                <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
+                <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto custom-scrollbar">
                     <div><label className="block text-sm text-slate-400 mb-1">Title <span className="text-red-400">*</span></label><input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white" required value={title} onChange={e => setTitle(e.target.value)} /></div>
                     <div><label className="block text-sm text-slate-400 mb-1">Alternate Titles (comma separated)</label><input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" value={altTitles} onChange={e => setAltTitles(e.target.value)} placeholder="Korean Title, etc." /></div>
                     <div className="grid grid-cols-2 gap-4">
                         <div><label className="block text-sm text-slate-400 mb-1">Status</label><select className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white" value={status} onChange={e => setStatus(e.target.value as any)}><option value="Reading">Reading</option><option value="Plan to Read">Plan to Read</option><option value="Completed">Completed</option><option value="Dropped">Dropped</option></select></div>
                         <div><label className="block text-sm text-slate-400 mb-1">Rating (0-5)</label><div className="flex items-center gap-2 h-10">{[1,2,3,4,5].map(v => (<button type="button" key={v} onClick={() => setRating(v)} className="focus:outline-none"><Star className={`w-6 h-6 ${rating >= v ? 'fill-yellow-400 text-yellow-400' : 'text-slate-600'}`} /></button>))}</div></div>
                     </div>
-                    <div><label className="block text-sm text-slate-400 mb-1">Staff / Authors (comma separated)</label><input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" value={staff} onChange={e => setStaff(e.target.value)} placeholder="Author, Artist" /></div>
-                    <div><label className="block text-sm text-slate-400 mb-1">Tags (comma separated)</label><input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" value={tags} onChange={e => setTags(e.target.value)} placeholder="Action, Fantasy, System" /></div>
+                    
+                    {/* Staff Input with Presets */}
+                    <div>
+                        <label className="block text-sm text-slate-400 mb-1">Staff / Authors (comma separated)</label>
+                        <input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" value={staff} onChange={e => setStaff(e.target.value)} placeholder="Author, Artist" />
+                        {presetStaff && presetStaff.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                                <span className="text-[10px] text-slate-500 mr-1">Quick Add:</span>
+                                {presetStaff.map(p => (
+                                    <button type="button" key={p} onClick={() => appendValue(staff, setStaff, p)} className="text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-blue-600 hover:text-white transition-colors">{p}</button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Tags Input with Presets */}
+                    <div>
+                        <label className="block text-sm text-slate-400 mb-1">Tags (comma separated)</label>
+                        <input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" value={tags} onChange={e => setTags(e.target.value)} placeholder="Action, Fantasy, System" />
+                        {presetTags && presetTags.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                                <span className="text-[10px] text-slate-500 mr-1">Quick Add:</span>
+                                {presetTags.map(p => (
+                                    <button type="button" key={p} onClick={() => appendValue(tags, setTags, p)} className="text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-blue-600 hover:text-white transition-colors">{p}</button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    
                     <div><label className="block text-sm text-slate-400 mb-1">Cover Image URL</label><input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" value={coverUrl} onChange={e => setCoverUrl(e.target.value)} placeholder="https://..." /><p className="text-[10px] text-slate-500 mt-1">Leave empty for random placeholder.</p></div>
                     <div className="pt-4 flex justify-end gap-3 border-t border-slate-700 mt-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button className="w-32">{initialData ? 'Save Changes' : 'Add Manhwa'}</Button></div>
                 </form>
@@ -911,12 +963,97 @@ const AnalyticsPage = () => {
   );
 };
 
+// --- Preset Manager Component for Settings ---
+const PresetManager = () => {
+  const [tagInput, setTagInput] = useState('');
+  const [staffInput, setStaffInput] = useState('');
+  
+  const tags = useLiveQuery(async () => {
+    const rec = await db.config.get('preset_tags');
+    return (rec?.value as string[]) || [];
+  }, []);
+  
+  const staff = useLiveQuery(async () => {
+    const rec = await db.config.get('preset_staff');
+    return (rec?.value as string[]) || [];
+  }, []);
+
+  const addPreset = async (type: 'tags' | 'staff', value: string) => {
+    if (!value.trim()) return;
+    const key = `preset_${type}`;
+    const current = type === 'tags' ? tags : staff;
+    const newList = Array.from(new Set([...(current || []), value.trim()]));
+    await db.config.put({ key, value: newList });
+    if (type === 'tags') setTagInput(''); else setStaffInput('');
+  };
+
+  const removePreset = async (type: 'tags' | 'staff', value: string) => {
+    const key = `preset_${type}`;
+    const current = type === 'tags' ? tags : staff;
+    const newList = (current || []).filter(v => v !== value);
+    await db.config.put({ key, value: newList });
+  };
+
+  return (
+    <Card className="p-6 space-y-6">
+        <h2 className="text-xl font-semibold flex items-center gap-2"><Tag className="w-5 h-5 text-green-400" />Manage Presets</h2>
+        <div className="grid md:grid-cols-2 gap-8">
+            {/* Tags Manager */}
+            <div className="space-y-3">
+                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Pre-defined Tags</h3>
+                <div className="flex gap-2">
+                    <input 
+                        className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white flex-1"
+                        placeholder="Add generic tag..."
+                        value={tagInput}
+                        onChange={(e) => setTagInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && addPreset('tags', tagInput)}
+                    />
+                    <Button onClick={() => addPreset('tags', tagInput)} className="px-3" variant="secondary" icon={Plus}>Add</Button>
+                </div>
+                <div className="flex flex-wrap gap-2 min-h-[50px] p-2 bg-slate-900/50 rounded-lg border border-slate-800">
+                    {!tags?.length && <p className="text-xs text-slate-600 italic p-2">No preset tags.</p>}
+                    {tags?.map(t => (
+                        <Badge key={t} color="bg-slate-700 text-slate-200 border border-slate-600" onRemove={() => removePreset('tags', t)}>{t}</Badge>
+                    ))}
+                </div>
+            </div>
+
+            {/* Staff Manager */}
+            <div className="space-y-3">
+                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Pre-defined Staff</h3>
+                <div className="flex gap-2">
+                    <input 
+                        className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white flex-1"
+                        placeholder="Add staff member..."
+                        value={staffInput}
+                        onChange={(e) => setStaffInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && addPreset('staff', staffInput)}
+                    />
+                    <Button onClick={() => addPreset('staff', staffInput)} className="px-3" variant="secondary" icon={Plus}>Add</Button>
+                </div>
+                <div className="flex flex-wrap gap-2 min-h-[50px] p-2 bg-slate-900/50 rounded-lg border border-slate-800">
+                     {!staff?.length && <p className="text-xs text-slate-600 italic p-2">No preset staff.</p>}
+                    {staff?.map(s => (
+                        <Badge key={s} color="bg-slate-700 text-slate-200 border border-slate-600" onRemove={() => removePreset('staff', s)}>{s}</Badge>
+                    ))}
+                </div>
+            </div>
+        </div>
+    </Card>
+  );
+};
+
 const SettingsPage = () => {
   const [folderLinked, setFolderLinked] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
   const [currentTheme, setCurrentTheme] = useState('default');
+  const [isIframe, setIsIframe] = useState(false);
 
   useEffect(() => {
+    // Check if running in iframe
+    setIsIframe(window.self !== window.top);
+
     const init = async () => {
         // Connection Check
         const hasHandle = db.hasConnection();
@@ -938,9 +1075,18 @@ const SettingsPage = () => {
 
   const handleLinkFolder = async () => {
     setStatusMsg("Connecting...");
-    const success = await db.connectToFolder();
-    setFolderLinked(success);
-    setStatusMsg(success ? "Folder Linked Successfully" : "Failed to link folder");
+    const result = await db.connectToFolder();
+    setFolderLinked(result.success);
+    
+    if (result.success) {
+       setStatusMsg("Folder Linked Successfully");
+    } else {
+       setStatusMsg(result.message || "Failed to link folder");
+       // Alert user if it's a specific error (like security restriction)
+       if (result.message && !result.message.toLowerCase().includes('cancelled')) {
+           alert(result.message);
+       }
+    }
   };
 
   const handleReloadFromDisk = async () => {
@@ -999,6 +1145,9 @@ const SettingsPage = () => {
           })}
         </div>
       </Card>
+      
+      {/* Preset Manager Section */}
+      <PresetManager />
 
       {/* Data Storage Section */}
       <Card className="p-6 space-y-4">
@@ -1013,13 +1162,25 @@ const SettingsPage = () => {
                  </div>
                  {folderLinked && (<Button variant="ghost" onClick={handleReloadFromDisk} title="Reload from Disk" className="p-2"><RefreshCw className="w-4 h-4" /></Button>)}
              </div>
+
+             {/* Iframe Warning */}
+             {isIframe && !folderLinked && (
+                 <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-3 text-red-300 text-xs mb-4">
+                    <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <div>
+                        <p className="font-bold mb-1">Preview Mode Detected</p>
+                        <p>Browser security blocks File System access in preview frames. To link a folder, you must open this app in a new tab.</p>
+                    </div>
+                 </div>
+             )}
+
              {!folderLinked ? (
                  <div className="space-y-3">
                      <div className="flex gap-2 items-center bg-yellow-500/10 border border-yellow-500/20 p-3 rounded-md">
                         <AlertCircle className="w-5 h-5 text-yellow-500 flex-shrink-0" />
                         <p className="text-xs text-yellow-200">Linking a folder creates a <code>library</code> folder where each Manhwa is saved as a separate JSON file. You can edit these files externally.</p>
                      </div>
-                     <Button onClick={handleLinkFolder} className="w-full" variant="secondary"><FolderOpen className="w-4 h-4" />Link Local Folder</Button>
+                     <Button onClick={handleLinkFolder} className="w-full" variant="secondary" disabled={isIframe}><FolderOpen className="w-4 h-4" />Link Local Folder</Button>
                  </div>
              ) : (<div className="text-xs text-slate-400 text-center"><p>{statusMsg}</p></div>)}
         </div>
