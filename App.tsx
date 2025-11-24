@@ -929,6 +929,12 @@ const SceneFormModal = ({ manhwa, sceneToEdit, onClose }: { manhwa: Manhwa, scen
   const [tags, setTags] = useState(sceneToEdit?.tags.join(', ') || '');
   const [aiLoading, setAiLoading] = useState(false);
 
+  // Fetch preset tags
+  const presetTags = useLiveQuery(async () => {
+    const rec = await db.config.get('preset_tags');
+    return (rec?.value as string[]) || [];
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const sceneData = {
@@ -957,6 +963,18 @@ const SceneFormModal = ({ manhwa, sceneToEdit, onClose }: { manhwa: Manhwa, scen
     }
   };
 
+  const appendTag = (tag: string) => {
+    if (!tags) {
+        setTags(tag);
+    } else {
+        // Simple check to avoid exact duplicates
+        const currentTags = tags.split(',').map(t => t.trim().toLowerCase());
+        if (!currentTags.includes(tag.toLowerCase())) {
+            setTags(`${tags}, ${tag}`);
+        }
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
       <div className="bg-slate-800 w-full max-w-lg rounded-2xl border border-slate-700 shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
@@ -968,7 +986,20 @@ const SceneFormModal = ({ manhwa, sceneToEdit, onClose }: { manhwa: Manhwa, scen
           <div><label className="block text-sm text-slate-400 mb-1">Chapter Number</label><input type="number" required className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white" value={chapter} onChange={e => setChapter(Number(e.target.value))} /></div>
           <div><div className="flex justify-between mb-1"><label className="block text-sm text-slate-400">Description</label><button type="button" onClick={handleAiGenerate} disabled={aiLoading} className="text-xs flex items-center gap-1 text-blue-400 hover:text-blue-300 disabled:opacity-50"><Wand2 className="w-3 h-3" />{aiLoading ? 'Magic...' : 'AI Enhance'}</button></div><textarea rows={4} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" placeholder="What happened? E.g. 'Jin-Woo summons Igris for the first time...'" value={desc} onChange={e => setDesc(e.target.value)} /></div>
           <div><label className="block text-sm text-slate-400 mb-1">Characters (comma separated)</label><input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" placeholder="e.g. Jin-Woo, Cha Hae-In" value={chars} onChange={e => setChars(e.target.value)} /></div>
-          <div><label className="block text-sm text-slate-400 mb-1">Tags (comma separated)</label><input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" placeholder="e.g. Fight, Fluff, Cliffhanger" value={tags} onChange={e => setTags(e.target.value)} /></div>
+          
+          <div>
+            <label className="block text-sm text-slate-400 mb-1">Tags (comma separated)</label>
+            <input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" placeholder="e.g. Fight, Fluff, Cliffhanger" value={tags} onChange={e => setTags(e.target.value)} />
+            {presetTags && presetTags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                    <span className="text-[10px] text-slate-500 mr-1">Quick Add:</span>
+                    {presetTags.map(p => (
+                        <button type="button" key={p} onClick={() => appendTag(p)} className="text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-blue-600 hover:text-white transition-colors">{p}</button>
+                    ))}
+                </div>
+            )}
+          </div>
+
           <div className="pt-4 flex justify-end gap-3"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" className="w-24">Save</Button></div>
         </form>
       </div>
