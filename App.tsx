@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { HashRouter, Routes, Route, Link, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -205,7 +206,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       </main>
 
       {/* Bottom Nav for Mobile */}
-      <nav className="md:hidden fixed bottom-0 left-0 w-full bg-slate-800 border-t border-slate-700 flex justify-around p-4 z-50">
+      <nav className="md:hidden fixed bottom-0 left-0 w-full bg-slate-800 border-t border-slate-700 flex justify-around p-4 z-50 safe-pb">
         {navItems.map((item) => (
           <Link 
             key={item.path} 
@@ -627,726 +628,368 @@ const LibraryPage = () => {
 };
 
 const SearchPage = () => {
-  const navigate = useNavigate();
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<MangaDexResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
+    const [query, setQuery] = useState('');
+    const [results, setResults] = useState<MangaDexResult[]>([]);
+    const [loading, setLoading] = useState(false);
+    const navigate = useNavigate();
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!query.trim()) return;
-    setLoading(true);
-    const data = await searchMangaDex(query);
-    setResults(data);
-    setLoading(false);
-  };
-
-  const handleAdd = async (manga: MangaDexResult) => {
-    const coverUrl = getCoverUrl(manga.id, manga.coverFileName);
-    const id = await db.addManhwa({
-      dexId: manga.id,
-      title: manga.title,
-      coverUrl,
-      author: manga.author || 'Unknown',
-      staff: manga.author ? [manga.author] : [],
-      rating: 0,
-      status: 'Reading',
-      tags: manga.tags,
-      createdAt: new Date(),
-      lastReadAt: new Date(),
-      alternativeTitles: []
-    });
-    navigate(`/manhwa/${id}`);
-  };
-
-  const handleTagClick = (tag: string) => {
-      navigate(`/?type=tag&value=${encodeURIComponent(tag)}`);
-  };
-
-  return (
-    <div className="space-y-6 max-w-2xl mx-auto">
-      <header className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Add Manhwa</h1>
-        <Button variant="secondary" onClick={() => setIsManualModalOpen(true)} className="text-sm">Manual Entry</Button>
-      </header>
-      
-      <form onSubmit={handleSearch} className="relative">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search MangaDex..."
-          className="w-full bg-slate-800 border border-slate-700 text-white p-4 pl-12 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none placeholder:text-slate-500"
-        />
-        <Search className="absolute left-4 top-4 text-slate-500 w-5 h-5" />
-        <Button className="absolute right-2 top-2" variant="primary" disabled={loading} type="submit">{loading ? 'Searching...' : 'Search'}</Button>
-      </form>
-
-      <div className="space-y-4">
-        {results.map((manga) => (
-          <Card key={manga.id} className="flex p-4 gap-4 hover:bg-slate-750 transition-colors">
-            <img src={getCoverUrl(manga.id, manga.coverFileName)} alt={manga.title} className="w-20 h-28 object-cover rounded-md bg-slate-900 flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <h3 className="font-bold text-lg text-white truncate">{manga.title}</h3>
-              <p className="text-sm text-slate-400 mb-2">{manga.author}</p>
-              <div className="flex flex-wrap gap-1 mb-3">
-                {manga.tags.slice(0, 3).map(tag => (
-                  <Badge key={tag} color="bg-slate-700 text-slate-400 text-[10px]" onClick={() => handleTagClick(tag)}>{tag}</Badge>
-                ))}
-              </div>
-              <Button onClick={() => handleAdd(manga)} icon={Plus} variant="secondary" className="w-full sm:w-auto text-sm py-1.5">Add to Library</Button>
-            </div>
-          </Card>
-        ))}
-        {results.length === 0 && !loading && query && (
-          <p className="text-center text-slate-500 mt-8">No results found.</p>
-        )}
-      </div>
-
-      {isManualModalOpen && (
-        <ManhwaMetadataModal 
-          onClose={() => setIsManualModalOpen(false)}
-          onSubmit={async (data) => {
-             const id = await db.addManhwa({
-                ...data,
-                dexId: `manual-${Date.now()}`,
-                createdAt: new Date(),
-                lastReadAt: new Date()
-             });
-             navigate(`/manhwa/${id}`);
-          }}
-        />
-      )}
-    </div>
-  );
-};
-
-const ManhwaDetailPage = () => {
-  const { id } = useParams();
-  const navigate = useNavigate();
-  const manhwaId = parseInt(id || '0');
-  
-  const manhwa = useLiveQuery(() => db.manhwas.get(manhwaId), [manhwaId]);
-  const scenes = useLiveQuery(() => db.scenes.where('manhwaId').equals(manhwaId).reverse().sortBy('chapterNumber'), [manhwaId]);
-
-  const [isSceneFormOpen, setIsSceneFormOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editingScene, setEditingScene] = useState<Scene | null>(null);
-  const [filterChar, setFilterChar] = useState('');
-  const [filterTag, setFilterTag] = useState('');
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
-  const filteredScenes = useMemo(() => {
-    if (!scenes) return [];
-    return scenes.filter(s => {
-      const matchChar = !filterChar || s.characters.some(c => c.toLowerCase().includes(filterChar.toLowerCase()));
-      const matchTag = !filterTag || s.tags.some(t => t.toLowerCase().includes(filterTag.toLowerCase()));
-      return matchChar && matchTag;
-    });
-  }, [scenes, filterChar, filterTag]);
-
-  useEffect(() => {
-    if (manhwa) db.manhwas.update(manhwaId, { lastReadAt: new Date() });
-  }, [manhwaId]);
-
-  if (!manhwa) return <div className="p-8 text-center">Loading...</div>;
-
-  const handleDeleteClick = () => {
-     if (!manhwaId) {
-        alert("Error: Invalid Manhwa ID");
-        return;
-     }
-     setShowDeleteConfirm(true);
-  };
-
-  const confirmDelete = async () => {
-    try {
-        console.log(`Starting deletion for Manhwa ID: ${manhwaId}`);
-        await db.deleteManhwa(manhwaId);
-        console.log("Deleted successfully");
-        setShowDeleteConfirm(false);
-        navigate('/');
-    } catch (e) {
-        console.error("Delete failed", e);
-        alert("Failed to delete. Check console.");
-    }
-  };
-
-  const filterByStaff = (name: string) => navigate(`/?type=staff&value=${encodeURIComponent(name)}`);
-  const filterByTag = (tag: string) => navigate(`/?type=tag&value=${encodeURIComponent(tag)}`);
-  const filterByCharacter = (char: string) => navigate(`/?type=character&value=${encodeURIComponent(char)}`);
-  const filterByStatus = () => navigate(`/?type=status&value=${encodeURIComponent(manhwa.status)}`);
-
-  const displayStaff = manhwa.staff && manhwa.staff.length > 0 ? manhwa.staff : [manhwa.author];
-
-  return (
-    <div className="space-y-8 animate-fade-in">
-      <div className="flex flex-col md:flex-row gap-8 items-start">
-        <div className="w-full md:w-56 flex-shrink-0 group relative">
-          <img src={manhwa.coverUrl} className="w-full aspect-[2/3] object-cover rounded-xl shadow-lg ring-1 ring-slate-700" alt={manhwa.title} />
-        </div>
-        <div className="flex-1 space-y-5 w-full">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">{manhwa.title}</h1>
-            {manhwa.alternativeTitles && manhwa.alternativeTitles.length > 0 && (
-                <div className="text-sm text-slate-400 mb-2 italic">{manhwa.alternativeTitles.join(' • ')}</div>
-            )}
-          </div>
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 flex-wrap">
-                <Users className="w-4 h-4 text-slate-500" />
-                {displayStaff.map((staffMember) => (
-                    <Badge key={staffMember} color="bg-slate-700 text-slate-200 hover:bg-slate-600 border border-slate-600" onClick={() => filterByStaff(staffMember)} title="Filter Library by Staff">{staffMember}</Badge>
-                ))}
-            </div>
-            <div className="flex items-center gap-2">
-                <span className="text-slate-500 text-sm font-medium">Rating:</span>
-                <StarRating rating={manhwa.rating} />
-            </div>
-            <div className="flex flex-wrap gap-2 items-center">
-                <Badge color={`
-                        ${manhwa.status === 'Reading' ? 'bg-blue-900/50 text-blue-300 border-blue-800' : ''}
-                        ${manhwa.status === 'Completed' ? 'bg-green-900/50 text-green-300 border-green-800' : ''}
-                        ${manhwa.status === 'Dropped' ? 'bg-red-900/50 text-red-300 border-red-800' : ''}
-                        ${manhwa.status === 'Plan to Read' ? 'bg-slate-700 text-slate-300 border-slate-600' : ''}
-                        border
-                    `} onClick={filterByStatus}>{manhwa.status}</Badge>
-                <div className="w-px h-4 bg-slate-700 mx-1"></div>
-                {manhwa.tags.map(t => <Badge key={t} onClick={() => filterByTag(t)} color="bg-slate-800 text-slate-400 border border-slate-700">#{t}</Badge>)}
-            </div>
-          </div>
-          <div className="flex gap-3 pt-4 border-t border-slate-700/50 mt-4">
-            <Button onClick={() => setIsEditModalOpen(true)} variant="secondary" icon={Edit2}>Edit Details</Button>
-             <Button onClick={handleDeleteClick} variant="danger" icon={Trash2}>Delete</Button>
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-4 pt-4">
-        <div className="flex flex-col sm:flex-row justify-between items-end sm:items-center gap-4 border-b border-slate-700 pb-4">
-          <div className="flex items-center gap-4">
-            <h2 className="text-2xl font-semibold flex items-center gap-2"><BookOpen className="w-6 h-6 text-blue-400" />Scenes</h2>
-             <Button onClick={() => { setEditingScene(null); setIsSceneFormOpen(true); }} icon={Plus} className="text-sm py-1.5 h-8">Add Scene</Button>
-          </div>
-          <div className="flex gap-2 w-full sm:w-auto">
-             <div className="relative flex-1 sm:w-40">
-                <User className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
-                <input placeholder="Filter Character" className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 p-2 text-sm text-white focus:border-blue-500 outline-none transition-colors" value={filterChar} onChange={e => setFilterChar(e.target.value)} />
-             </div>
-             <div className="relative flex-1 sm:w-40">
-                <Hash className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
-                <input placeholder="Filter Tag" className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 p-2 text-sm text-white focus:border-blue-500 outline-none transition-colors" value={filterTag} onChange={e => setFilterTag(e.target.value)} />
-             </div>
-          </div>
-        </div>
-
-        <div className="grid gap-4">
-          {filteredScenes.length === 0 ? (
-            <div className="text-center py-12 border border-dashed border-slate-800 rounded-xl bg-slate-900/50">
-                <p className="text-slate-500 mb-2">No scenes found.</p>
-                <Button variant="ghost" onClick={() => { setEditingScene(null); setIsSceneFormOpen(true); }} className="text-blue-400">Log the first scene</Button>
-            </div>
-          ) : (
-            filteredScenes.map((scene) => (
-              <Card key={scene.id} className="p-4 relative group hover:border-blue-500/30 transition-colors">
-                <div className="flex justify-between items-start mb-2">
-                   <div className="flex items-center gap-3">
-                      <span className="text-lg font-bold text-blue-400 font-mono">Ch.{scene.chapterNumber}</span>
-                      <div className="h-4 w-px bg-slate-700"></div>
-                      <div className="flex gap-1.5 flex-wrap">
-                        {scene.characters.map(c => (
-                            <Badge key={c} color="bg-slate-700/50 text-slate-300 text-[10px] border border-slate-700" onClick={() => filterByCharacter(c)}>{c}</Badge>
-                        ))}
-                      </div>
-                   </div>
-                   <button onClick={() => { setEditingScene(scene); setIsSceneFormOpen(true); }} className="text-slate-600 hover:text-white p-1 transition-colors">
-                     <SettingsIcon className="w-4 h-4" />
-                   </button>
-                </div>
-                <p className="text-slate-300 text-sm leading-relaxed mb-3 pl-1 border-l-2 border-slate-800">{scene.description}</p>
-                <div className="flex gap-1 flex-wrap">
-                   {scene.tags.map(t => <span key={t} onClick={() => filterByTag(t)} className="text-[10px] text-blue-400 bg-blue-500/5 border border-blue-500/10 px-1.5 py-0.5 rounded cursor-pointer hover:bg-blue-500/20">#{t}</span>)}
-                </div>
-              </Card>
-            ))
-          )}
-        </div>
-      </div>
-
-      <ConfirmationModal 
-         isOpen={showDeleteConfirm}
-         title="Delete Manhwa"
-         message="Are you sure you want to delete this Manhwa and all its scenes? This action cannot be undone."
-         onCancel={() => setShowDeleteConfirm(false)}
-         onConfirm={confirmDelete}
-         confirmText="Delete Forever"
-      />
-
-      {isSceneFormOpen && (
-        <SceneFormModal manhwa={manhwa} sceneToEdit={editingScene} onClose={() => setIsSceneFormOpen(false)} />
-      )}
-      {isEditModalOpen && (
-        <ManhwaMetadataModal
-            initialData={manhwa}
-            onClose={() => setIsEditModalOpen(false)}
-            onSubmit={async (data) => {
-                await db.manhwas.update(manhwaId, data);
-                setIsEditModalOpen(false);
-            }}
-        />
-      )}
-    </div>
-  );
-};
-
-const ManhwaMetadataModal = ({ initialData, onClose, onSubmit }: { initialData?: Manhwa, onClose: () => void, onSubmit: (data: Omit<Manhwa, 'id'>) => Promise<void> }) => {
-    const [title, setTitle] = useState(initialData?.title || '');
-    const [altTitles, setAltTitles] = useState(initialData?.alternativeTitles?.join(', ') || '');
-    const [coverUrl, setCoverUrl] = useState(initialData?.coverUrl || '');
-    const [staff, setStaff] = useState(initialData?.staff?.join(', ') || initialData?.author || '');
-    const [status, setStatus] = useState<Manhwa['status']>(initialData?.status || 'Reading');
-    const [rating, setRating] = useState(initialData?.rating || 0);
-    const [tags, setTags] = useState(initialData?.tags?.join(', ') || '');
-
-    // Fetch Presets
-    const presetTags = useLiveQuery(async () => {
-      const rec = await db.config.get('preset_tags');
-      return (rec?.value as string[]) || [];
-    });
-    
-    const presetStaff = useLiveQuery(async () => {
-      const rec = await db.config.get('preset_staff');
-      return (rec?.value as string[]) || [];
-    });
-
-    const handleSubmit = (e: React.FormEvent) => {
+    const search = async (e: React.FormEvent) => {
         e.preventDefault();
-        const staffList = staff.split(',').map(s => s.trim()).filter(Boolean);
-        onSubmit({
-            title,
-            alternativeTitles: altTitles.split(',').map(s => s.trim()).filter(Boolean),
-            coverUrl: coverUrl || 'https://picsum.photos/300/450',
-            staff: staffList,
-            author: staffList[0] || 'Unknown',
-            status,
-            rating,
-            tags: tags.split(',').map(s => s.trim()).filter(Boolean),
-            dexId: initialData?.dexId || '',
-            createdAt: initialData?.createdAt || new Date(),
-            lastReadAt: initialData?.lastReadAt || new Date()
-        });
-    };
-
-    const appendValue = (current: string, setFunc: (s: string) => void, val: string) => {
-        if (!current) {
-            setFunc(val);
-        } else if (!current.toLowerCase().includes(val.toLowerCase())) {
-            setFunc(`${current}, ${val}`);
+        setLoading(true);
+        try {
+            const data = await searchMangaDex(query);
+            setResults(data);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
         }
     };
 
-    // Auto-Populate Tags from Scenes
-    const handleSyncTagsFromScenes = async () => {
-        if (!initialData?.id) return;
-        const scenes = await db.scenes.where('manhwaId').equals(initialData.id).toArray();
-        const sceneTags = new Set<string>();
-        scenes.forEach(s => s.tags.forEach(t => sceneTags.add(t)));
-        
-        // Merge with current input
-        const currentTags = tags.split(',').map(t => t.trim()).filter(Boolean);
-        const merged = Array.from(new Set([...currentTags, ...sceneTags]));
-        setTags(merged.join(', '));
+    const add = async (manga: MangaDexResult) => {
+        try {
+            const id = await db.addManhwa({
+                dexId: manga.id,
+                title: manga.title,
+                author: manga.author || 'Unknown',
+                coverUrl: getCoverUrl(manga.id, manga.coverFileName),
+                status: 'Plan to Read',
+                rating: 0,
+                tags: manga.tags,
+                createdAt: new Date()
+            });
+            navigate(`/manhwa/${id}`);
+        } catch (e) {
+            console.error(e);
+        }
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-slate-800 w-full max-w-lg rounded-2xl border border-slate-700 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-                <div className="p-6 border-b border-slate-700 flex justify-between items-center bg-slate-850">
-                    <h2 className="text-xl font-bold text-white">{initialData ? 'Edit Details' : 'Add Manhwa Manually'}</h2>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white"><X className="w-6 h-6" /></button>
+        <div className="space-y-6">
+            <h1 className="text-2xl font-bold">Search MangaDex</h1>
+            <form onSubmit={search} className="flex gap-2">
+                <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
+                    <input 
+                        value={query} 
+                        onChange={(e) => setQuery(e.target.value)} 
+                        className="w-full bg-slate-800 border-slate-700 border rounded-xl pl-10 py-3 focus:outline-none focus:border-blue-500" 
+                        placeholder="Search by title..." 
+                    />
                 </div>
-                <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto custom-scrollbar">
-                    <div><label className="block text-sm text-slate-400 mb-1">Title <span className="text-red-400">*</span></label><input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white" required value={title} onChange={e => setTitle(e.target.value)} /></div>
-                    <div><label className="block text-sm text-slate-400 mb-1">Alternate Titles (comma separated)</label><input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" value={altTitles} onChange={e => setAltTitles(e.target.value)} placeholder="Korean Title, etc." /></div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div><label className="block text-sm text-slate-400 mb-1">Status</label><select className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white" value={status} onChange={e => setStatus(e.target.value as any)}><option value="Reading">Reading</option><option value="Plan to Read">Plan to Read</option><option value="Completed">Completed</option><option value="Dropped">Dropped</option></select></div>
-                        <div><label className="block text-sm text-slate-400 mb-1">Rating (0-5)</label><div className="flex items-center gap-2 h-10">{[1,2,3,4,5].map(v => (<button type="button" key={v} onClick={() => setRating(v)} className="focus:outline-none"><Star className={`w-6 h-6 ${rating >= v ? 'fill-yellow-400 text-yellow-400' : 'text-slate-600'}`} /></button>))}</div></div>
-                    </div>
-                    
-                    {/* Staff Input with Presets */}
-                    <div>
-                        <label className="block text-sm text-slate-400 mb-1">Staff / Authors (comma separated)</label>
-                        <input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" value={staff} onChange={e => setStaff(e.target.value)} placeholder="Author, Artist" />
-                        {presetStaff && presetStaff.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-2">
-                                <span className="text-[10px] text-slate-500 mr-1">Quick Add:</span>
-                                {presetStaff.map(p => (
-                                    <button type="button" key={p} onClick={() => appendValue(staff, setStaff, p)} className="text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-blue-600 hover:text-white transition-colors">{p}</button>
-                                ))}
+                <Button type="submit" disabled={loading} className="px-6">
+                    {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Search'}
+                </Button>
+            </form>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {results.map(m => (
+                    <Card key={m.id} className="flex overflow-hidden h-40">
+                        <img src={getCoverUrl(m.id, m.coverFileName)} className="w-28 h-full object-cover" loading="lazy" />
+                        <div className="p-3 flex flex-col justify-between flex-1 min-w-0">
+                            <div>
+                                <h3 className="font-bold truncate" title={m.title}>{m.title}</h3>
+                                <p className="text-sm text-slate-400 truncate">{m.author}</p>
                             </div>
-                        )}
-                    </div>
-
-                    {/* Tags Input with Presets */}
-                    <div>
-                        <div className="flex justify-between items-end mb-1">
-                            <label className="block text-sm text-slate-400">Tags (comma separated)</label>
-                            {initialData?.id && (
-                                <button type="button" onClick={handleSyncTagsFromScenes} className="flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300">
-                                    <RefreshCw className="w-3 h-3" /> Sync from Scenes
-                                </button>
-                            )}
+                            <Button onClick={() => add(m)} variant="secondary" className="w-full text-xs">Add to Library</Button>
                         </div>
-                        <input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" value={tags} onChange={e => setTags(e.target.value)} placeholder="Action, Fantasy, System" />
-                        {presetTags && presetTags.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-2">
-                                <span className="text-[10px] text-slate-500 mr-1">Quick Add:</span>
-                                {presetTags.map(p => (
-                                    <button type="button" key={p} onClick={() => appendValue(tags, setTags, p)} className="text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-blue-600 hover:text-white transition-colors">{p}</button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                    
-                    <div><label className="block text-sm text-slate-400 mb-1">Cover Image URL</label><input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" value={coverUrl} onChange={e => setCoverUrl(e.target.value)} placeholder="https://..." /><p className="text-[10px] text-slate-500 mt-1">Leave empty for random placeholder.</p></div>
-                    <div className="pt-4 flex justify-end gap-3 border-t border-slate-700 mt-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" className="w-32">{initialData ? 'Save Changes' : 'Add Manhwa'}</Button></div>
-                </form>
+                    </Card>
+                ))}
             </div>
         </div>
     );
 };
 
-const SceneFormModal = ({ manhwa, sceneToEdit, onClose }: { manhwa: Manhwa, sceneToEdit: Scene | null, onClose: () => void }) => {
-  const [chapter, setChapter] = useState(sceneToEdit?.chapterNumber || 0);
-  const [desc, setDesc] = useState(sceneToEdit?.description || '');
-  const [chars, setChars] = useState(sceneToEdit?.characters.join(', ') || '');
-  const [tags, setTags] = useState(sceneToEdit?.tags.join(', ') || '');
-  const [aiLoading, setAiLoading] = useState(false);
+const ManhwaDetailPage = () => {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const manhwaId = Number(id);
+    
+    // UI States
+    const [sceneFormOpen, setSceneFormOpen] = useState(false);
+    
+    // Scene Form States
+    const [chapter, setChapter] = useState('');
+    const [characters, setCharacters] = useState('');
+    const [sceneTags, setSceneTags] = useState('');
+    const [description, setDescription] = useState('');
+    const [generating, setGenerating] = useState(false);
 
-  // Fetch preset tags
-  const presetTags = useLiveQuery(async () => {
-    const rec = await db.config.get('preset_tags');
-    return (rec?.value as string[]) || [];
-  }, []);
+    const data = useLiveQuery(async () => {
+        const m = await db.manhwas.get(manhwaId);
+        const s = await db.scenes.where('manhwaId').equals(manhwaId).toArray();
+        return { manhwa: m, scenes: s.sort((a,b) => b.chapterNumber - a.chapterNumber) };
+    }, [manhwaId]);
 
-  // Fetch characters existing in other scenes of THIS manhwa
-  const existingCharacters = useLiveQuery(async () => {
-    if (!manhwa.id) return [];
-    const scenes = await db.scenes.where('manhwaId').equals(manhwa.id).toArray();
-    const uniqueChars = new Set<string>();
-    scenes.forEach(s => s.characters.forEach(c => uniqueChars.add(c)));
-    return Array.from(uniqueChars).sort();
-  }, [manhwa.id]);
+    if (!data?.manhwa) return <div>Loading...</div>;
+    const { manhwa, scenes } = data;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const sceneData = {
-      manhwaId: manhwa.id!,
-      chapterNumber: Number(chapter),
-      description: desc,
-      characters: chars.split(',').map(s => s.trim()).filter(Boolean),
-      tags: tags.split(',').map(s => s.trim()).filter(Boolean),
-      createdAt: new Date()
+    const handleDelete = async () => {
+        if (confirm("Delete this manhwa?")) {
+            await db.deleteManhwa(manhwaId);
+            navigate('/');
+        }
     };
-    if (sceneToEdit?.id) await db.scenes.update(sceneToEdit.id, sceneData);
-    else await db.scenes.add(sceneData);
-    onClose();
-  };
 
-  const handleAiGenerate = async () => {
-    setAiLoading(true);
-    try {
-      const context = `Characters: ${chars}, Tags: ${tags}, Draft: ${desc}`;
-      const generated = await generateSceneDescription(manhwa.title, chapter, context);
-      setDesc(generated);
-    } catch (err) {
-      alert("Failed to generate. Check console/API key.");
-    } finally {
-      setAiLoading(false);
-    }
-  };
+    const updateManhwa = async (updates: Partial<Manhwa>) => {
+        await db.manhwas.update(manhwaId, updates);
+    };
 
-  const appendValue = (current: string, setFunc: (s: string) => void, val: string) => {
-      if (!current) {
-          setFunc(val);
-      } else {
-          const currentArr = current.split(',').map(t => t.trim().toLowerCase());
-          if (!currentArr.includes(val.toLowerCase())) {
-              setFunc(`${current}, ${val}`);
-          }
-      }
-  };
+    const generateDesc = async () => {
+        if (!chapter) return alert("Please enter a chapter number");
+        setGenerating(true);
+        try {
+            const context = `Characters: ${characters}, Tags: ${sceneTags}`;
+            const desc = await generateSceneDescription(manhwa.title, Number(chapter), context);
+            setDescription(desc);
+        } catch(e) {
+            alert("Generation failed");
+        } finally {
+            setGenerating(false);
+        }
+    };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <div className="bg-slate-800 w-full max-w-lg rounded-2xl border border-slate-700 shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-        <div className="p-6 border-b border-slate-700 flex justify-between items-center bg-slate-850">
-          <h2 className="text-xl font-bold text-white">{sceneToEdit ? 'Edit Scene' : 'Log New Scene'}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white"><X className="w-6 h-6" /></button>
+    const addScene = async () => {
+        await db.scenes.add({
+            manhwaId,
+            chapterNumber: Number(chapter),
+            description,
+            characters: characters.split(',').map(s => s.trim()).filter(Boolean),
+            tags: sceneTags.split(',').map(s => s.trim()).filter(Boolean),
+            createdAt: new Date()
+        });
+        setSceneFormOpen(false);
+        setChapter(''); setDescription(''); setCharacters(''); setSceneTags('');
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="flex flex-col md:flex-row gap-6">
+                <div className="w-full md:w-64 flex-shrink-0">
+                    <div className="rounded-xl overflow-hidden shadow-2xl aspect-[2/3]">
+                        <img src={manhwa.coverUrl} className="w-full h-full object-cover" />
+                    </div>
+                </div>
+                <div className="flex-1 space-y-4">
+                    <div className="flex justify-between items-start">
+                        <h1 className="text-4xl font-bold">{manhwa.title}</h1>
+                        <div className="flex gap-2">
+                             <Button variant="ghost" icon={Trash2} onClick={handleDelete} className="text-red-400" />
+                        </div>
+                    </div>
+                    <p className="text-xl text-slate-400">{manhwa.author}</p>
+                    
+                    <div className="flex flex-wrap gap-4 items-center bg-slate-800 p-4 rounded-xl border border-slate-700">
+                        <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-500 uppercase">Status</label>
+                            <select 
+                                value={manhwa.status} 
+                                onChange={(e) => updateManhwa({ status: e.target.value as any })}
+                                className="block bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm"
+                            >
+                                {['Reading', 'Completed', 'Plan to Read', 'Dropped'].map(s => <option key={s}>{s}</option>)}
+                            </select>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-500 uppercase">Rating</label>
+                            <div className="flex items-center gap-1">
+                                <input 
+                                    type="number" min="0" max="5" 
+                                    value={manhwa.rating} 
+                                    onChange={(e) => updateManhwa({ rating: Number(e.target.value) })}
+                                    className="w-12 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-sm"
+                                />
+                                <StarRating rating={manhwa.rating} />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                        {manhwa.tags.map(t => <Badge key={t}>{t}</Badge>)}
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex justify-between items-center">
+                 <h2 className="text-2xl font-bold flex items-center gap-2"><List className="w-6 h-6" /> Scenes</h2>
+                 <Button onClick={() => setSceneFormOpen(!sceneFormOpen)} icon={Plus}>{sceneFormOpen ? 'Cancel' : 'Add Scene'}</Button>
+            </div>
+
+            {sceneFormOpen && (
+                <Card className="p-4 space-y-4 border-blue-500/50">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <input type="number" placeholder="Ch #" value={chapter} onChange={e => setChapter(e.target.value)} className="bg-slate-900 border-slate-700 border rounded-lg p-2" />
+                        <input placeholder="Characters (comma sep)" value={characters} onChange={e => setCharacters(e.target.value)} className="bg-slate-900 border-slate-700 border rounded-lg p-2 md:col-span-2" />
+                        <input placeholder="Tags (comma sep)" value={sceneTags} onChange={e => setSceneTags(e.target.value)} className="bg-slate-900 border-slate-700 border rounded-lg p-2" />
+                    </div>
+                    <textarea 
+                        placeholder="Description..." 
+                        value={description} 
+                        onChange={e => setDescription(e.target.value)} 
+                        className="w-full bg-slate-900 border-slate-700 border rounded-lg p-2 h-24"
+                    />
+                    <div className="flex justify-between">
+                         <Button onClick={generateDesc} disabled={generating} variant="secondary" icon={Sparkles}>
+                            {generating ? 'Dreaming...' : 'Generate with AI'}
+                         </Button>
+                         <Button onClick={addScene}>Save Scene</Button>
+                    </div>
+                </Card>
+            )}
+
+            <div className="grid gap-4">
+                {scenes?.map(scene => (
+                    <Card key={scene.id} className="p-4 flex gap-4">
+                        <div className="flex flex-col items-center justify-center w-16 bg-slate-900 rounded-lg border border-slate-700 shrink-0 h-16">
+                            <span className="text-xs text-slate-500">CH</span>
+                            <span className="text-xl font-bold">{scene.chapterNumber}</span>
+                        </div>
+                        <div className="flex-1 space-y-2">
+                            <p className="text-slate-300">{scene.description}</p>
+                            <div className="flex flex-wrap gap-2">
+                                {scene.characters.map(c => <Badge key={c} color="bg-blue-900/30 text-blue-300 border border-blue-800">{c}</Badge>)}
+                                {scene.tags.map(t => <Badge key={t} color="bg-slate-700 text-slate-400">{t}</Badge>)}
+                            </div>
+                        </div>
+                        <button onClick={() => db.scenes.delete(scene.id!)} className="text-slate-600 hover:text-red-400 self-start">
+                            <X className="w-4 h-4" />
+                        </button>
+                    </Card>
+                ))}
+            </div>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div><label className="block text-sm text-slate-400 mb-1">Chapter Number</label><input type="number" required className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white" value={chapter} onChange={e => setChapter(Number(e.target.value))} /></div>
-          <div><div className="flex justify-between mb-1"><label className="block text-sm text-slate-400">Description</label><button type="button" onClick={handleAiGenerate} disabled={aiLoading} className="text-xs flex items-center gap-1 text-blue-400 hover:text-blue-300 disabled:opacity-50"><Wand2 className="w-3 h-3" />{aiLoading ? 'Magic...' : 'AI Enhance'}</button></div><textarea rows={4} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" placeholder="What happened? E.g. 'Jin-Woo summons Igris for the first time...'" value={desc} onChange={e => setDesc(e.target.value)} /></div>
-          
-          <div>
-            <label className="block text-sm text-slate-400 mb-1">Characters (comma separated)</label>
-            <input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" placeholder="e.g. Jin-Woo, Cha Hae-In" value={chars} onChange={e => setChars(e.target.value)} />
-            {existingCharacters && existingCharacters.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                    <span className="text-[10px] text-slate-500 mr-1">Quick Add:</span>
-                    {existingCharacters.map(c => (
-                        <button type="button" key={c} onClick={() => appendValue(chars, setChars, c)} className="text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-blue-600 hover:text-white transition-colors">{c}</button>
-                    ))}
-                </div>
-            )}
-          </div>
-          
-          <div>
-            <label className="block text-sm text-slate-400 mb-1">Tags (comma separated)</label>
-            <input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" placeholder="e.g. Fight, Fluff, Cliffhanger" value={tags} onChange={e => setTags(e.target.value)} />
-            {presetTags && presetTags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                    <span className="text-[10px] text-slate-500 mr-1">Quick Add:</span>
-                    {presetTags.map(p => (
-                        <button type="button" key={p} onClick={() => appendValue(tags, setTags, p)} className="text-[10px] px-2 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-blue-600 hover:text-white transition-colors">{p}</button>
-                    ))}
-                </div>
-            )}
-          </div>
-
-          <div className="pt-4 flex justify-end gap-3"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" className="w-24">Save</Button></div>
-        </form>
-      </div>
-    </div>
-  );
+    );
 };
 
 const AnalyticsPage = () => {
-  const navigate = useNavigate();
-  const manhwas = useLiveQuery(() => db.manhwas.toArray());
-  const [aiInsight, setAiInsight] = useState<string | null>(null);
+    const [analysis, setAnalysis] = useState('');
+    const [loading, setLoading] = useState(false);
 
-  const data = useMemo(() => {
-    if (!manhwas) return [];
-    const counts: Record<string, number> = {};
-    manhwas.forEach(m => { m.tags.forEach(t => { counts[t] = (counts[t] || 0) + 1; }); });
-    return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 6);
-  }, [manhwas]);
-  
-  const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#ef4444'];
-  const getInsight = async () => { if (!manhwas) return; const titles = manhwas.map(m => `${m.title} (${m.tags.slice(0,2).join('/')})`); setAiInsight("Analyzing your library..."); const result = await analyzeReadingHabits(titles); setAiInsight(result); };
-  const handlePieClick = (data: any) => { if (data && data.name) navigate(`/?type=tag&value=${encodeURIComponent(data.name)}`); };
+    const stats = useLiveQuery(async () => {
+        const manhwas = await db.manhwas.toArray();
+        const tagCounts: Record<string, number> = {};
+        const statusCounts: Record<string, number> = {};
+        
+        manhwas.forEach(m => {
+            m.tags.forEach(t => tagCounts[t] = (tagCounts[t] || 0) + 1);
+            statusCounts[m.status] = (statusCounts[m.status] || 0) + 1;
+        });
 
-  return (
-    <div className="space-y-6">
-      <header><h1 className="text-3xl font-bold">Analytics</h1><p className="text-slate-400">Your reading habits visualized</p></header>
-      <div className="grid md:grid-cols-2 gap-6">
-        <Card className="p-6 h-80 flex flex-col">
-          <h3 className="text-lg font-bold mb-4">Top Genres</h3><p className="text-xs text-slate-500 mb-2">Click a slice to filter library</p>
-          <div className="flex-1 w-full min-h-0"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={data} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" onClick={handlePieClick} cursor="pointer">{data.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}</Pie><RechartsTooltip contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#fff' }} itemStyle={{ color: '#fff' }} /><Legend layout="vertical" verticalAlign="middle" align="right" /></PieChart></ResponsiveContainer></div>
-        </Card>
-        <Card className="p-6 relative overflow-hidden">
-          <div className="relative z-10"><h3 className="text-lg font-bold mb-4 flex items-center gap-2"><Wand2 className="w-5 h-5 text-purple-400" />AI Insight</h3><div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700 min-h-[100px]"><p className="text-slate-300 leading-relaxed italic">{aiInsight || "Click generate to see what Gemini thinks of your taste."}</p></div><Button onClick={getInsight} className="mt-4 w-full" variant="secondary">Generate Analysis</Button></div><div className="absolute -right-10 -bottom-10 w-40 h-40 bg-purple-600/20 blur-3xl rounded-full" />
-        </Card>
-        <Card className="p-6">
-            <h3 className="text-lg font-bold mb-2">Library Stats</h3>
-            <div className="space-y-4 mt-4">
-                <div className="flex justify-between items-center border-b border-slate-700 pb-2"><span className="text-slate-400">Total Manhwas</span><span className="text-2xl font-bold">{manhwas?.length || 0}</span></div>
-                <div className="flex justify-between items-center border-b border-slate-700 pb-2"><span className="text-slate-400">Completed</span><span className="text-2xl font-bold text-green-400">{manhwas?.filter(m => m.status === 'Completed').length || 0}</span></div>
-                <div className="flex justify-between items-center"><span className="text-slate-400">Reading</span><span className="text-2xl font-bold text-blue-400">{manhwas?.filter(m => m.status === 'Reading').length || 0}</span></div>
+        const topTags = Object.entries(tagCounts)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a,b) => b.value - a.value)
+            .slice(0, 8);
+            
+        return { topTags, statusCounts, manhwas };
+    });
+
+    const handleAnalyze = async () => {
+        if (!stats?.manhwas.length) return;
+        setLoading(true);
+        try {
+            const history = stats.manhwas.slice(0, 10).map(m => `${m.title} (${m.tags.slice(0,2).join(',')})`);
+            const res = await analyzeReadingHabits(history);
+            setAnalysis(res);
+        } catch(e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (!stats) return <div>Loading stats...</div>;
+
+    return (
+        <div className="space-y-8">
+            <h1 className="text-3xl font-bold">Analytics</h1>
+            
+            <div className="grid md:grid-cols-2 gap-6">
+                <Card className="p-6 h-80 flex flex-col">
+                    <h3 className="font-bold mb-4">Top Genres</h3>
+                    <div className="flex-1 w-full min-h-0">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie
+                                    data={stats.topTags}
+                                    dataKey="value"
+                                    nameKey="name"
+                                    cx="50%"
+                                    cy="50%"
+                                    outerRadius={80}
+                                    fill="#8884d8"
+                                    label
+                                >
+                                    {stats.topTags.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={`hsl(${index * 45}, 70%, 50%)`} />
+                                    ))}
+                                </Pie>
+                                <RechartsTooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none' }} />
+                                <Legend />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </div>
+                </Card>
+
+                <Card className="p-6 space-y-4">
+                    <h3 className="font-bold flex items-center gap-2"><Sparkles className="w-5 h-5 text-purple-400"/> AI Insight</h3>
+                    <div className="bg-slate-900 p-4 rounded-xl min-h-[100px] flex items-center justify-center text-center">
+                        {analysis ? <p className="text-slate-300">{analysis}</p> : <p className="text-slate-600 text-sm">Click analyze to get insights based on your library.</p>}
+                    </div>
+                    <Button onClick={handleAnalyze} disabled={loading} className="w-full" icon={Sparkles}>
+                        {loading ? 'Analyzing...' : 'Analyze My Taste'}
+                    </Button>
+                </Card>
             </div>
-        </Card>
-      </div>
-    </div>
-  );
-};
-
-// --- Preset Manager Component for Settings ---
-const PresetManager = () => {
-  const [tagInput, setTagInput] = useState('');
-  const [staffInput, setStaffInput] = useState('');
-  
-  const tags = useLiveQuery(async () => {
-    const rec = await db.config.get('preset_tags');
-    return (rec?.value as string[]) || [];
-  }, []);
-  
-  const staff = useLiveQuery(async () => {
-    const rec = await db.config.get('preset_staff');
-    return (rec?.value as string[]) || [];
-  }, []);
-
-  const addPreset = async (type: 'tags' | 'staff', value: string) => {
-    if (!value.trim()) return;
-    const key = `preset_${type}`;
-    const current = type === 'tags' ? tags : staff;
-    const newList = Array.from(new Set([...(current || []), value.trim()]));
-    await db.config.put({ key, value: newList });
-    if (type === 'tags') setTagInput(''); else setStaffInput('');
-  };
-
-  const removePreset = async (type: 'tags' | 'staff', value: string) => {
-    const key = `preset_${type}`;
-    const current = type === 'tags' ? tags : staff;
-    const newList = (current || []).filter(v => v !== value);
-    await db.config.put({ key, value: newList });
-  };
-
-  return (
-    <Card className="p-6 space-y-6">
-        <h2 className="text-xl font-semibold flex items-center gap-2"><Tag className="w-5 h-5 text-green-400" />Manage Presets</h2>
-        <div className="grid md:grid-cols-2 gap-8">
-            {/* Tags Manager */}
-            <div className="space-y-3">
-                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Pre-defined Tags</h3>
-                <div className="flex gap-2">
-                    <input 
-                        className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white flex-1"
-                        placeholder="Add generic tag..."
-                        value={tagInput}
-                        onChange={(e) => setTagInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && addPreset('tags', tagInput)}
-                    />
-                    <Button onClick={() => addPreset('tags', tagInput)} className="px-3" variant="secondary" icon={Plus}>Add</Button>
-                </div>
-                <div className="flex flex-wrap gap-2 min-h-[50px] p-2 bg-slate-900/50 rounded-lg border border-slate-800">
-                    {!tags?.length && <p className="text-xs text-slate-600 italic p-2">No preset tags.</p>}
-                    {tags?.map(t => (
-                        <Badge key={t} color="bg-slate-700 text-slate-200 border border-slate-600" onRemove={() => removePreset('tags', t)}>{t}</Badge>
-                    ))}
-                </div>
-            </div>
-
-            {/* Staff Manager */}
-            <div className="space-y-3">
-                <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Pre-defined Staff</h3>
-                <div className="flex gap-2">
-                    <input 
-                        className="bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white flex-1"
-                        placeholder="Add staff member..."
-                        value={staffInput}
-                        onChange={(e) => setStaffInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && addPreset('staff', staffInput)}
-                    />
-                    <Button onClick={() => addPreset('staff', staffInput)} className="px-3" variant="secondary" icon={Plus}>Add</Button>
-                </div>
-                <div className="flex flex-wrap gap-2 min-h-[50px] p-2 bg-slate-900/50 rounded-lg border border-slate-800">
-                     {!staff?.length && <p className="text-xs text-slate-600 italic p-2">No preset staff.</p>}
-                    {staff?.map(s => (
-                        <Badge key={s} color="bg-slate-700 text-slate-200 border border-slate-600" onRemove={() => removePreset('staff', s)}>{s}</Badge>
-                    ))}
-                </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                 {Object.entries(stats.statusCounts).map(([status, count]) => (
+                     <Card key={status} className="p-4 text-center">
+                         <div className="text-2xl font-bold text-white">{count}</div>
+                         <div className="text-xs text-slate-500 uppercase tracking-wider">{status}</div>
+                     </Card>
+                 ))}
             </div>
         </div>
-    </Card>
-  );
+    );
 };
 
-// --- Test/Demo Utilities ---
 const generateDemoData = async () => {
-    const demoManhwas: Omit<Manhwa, 'id'>[] = [
-        {
-            dexId: 'demo-1',
+    await db.transaction('rw', db.manhwas, db.scenes, async () => {
+        const mId = await db.manhwas.add({
             title: 'Solo Leveling',
-            alternativeTitles: ['Na Honjaman Level Up', 'I Alone Level Up'],
-            coverUrl: 'https://uploads.mangadex.org/covers/32d76d19-8a05-4db0-9fc2-e0b0648fe9d0/8f30327f-38d5-4422-92e1-4c6007559c5d.jpg',
-            author: 'Chugong',
-            staff: ['Chugong', 'Redice Studio', 'Dubu'],
-            status: 'Completed',
+            author: 'Chu-Gong',
+            coverUrl: 'https://upload.wikimedia.org/wikipedia/en/9/92/Solo_Leveling_Webtoon.png',
             rating: 5,
-            tags: ['Action', 'Adventure', 'Fantasy', 'System', 'Supernatural'],
-            createdAt: new Date(Date.now() - 1000000000),
+            status: 'Completed',
+            tags: ['Action', 'Fantasy', 'System'],
+            createdAt: new Date(),
             lastReadAt: new Date(),
-        },
-        {
-            dexId: 'demo-2',
-            title: 'Omniscient Reader\'s Viewpoint',
-            alternativeTitles: ['ORV', 'Jeonjijeok Dokja Sijeom'],
-            coverUrl: 'https://uploads.mangadex.org/covers/b980e0cb-469b-4654-94fe-6f41432f89f5/c405908a-234b-47e0-b962-430c496e95c1.jpg',
-            author: 'Sing Shong',
-            staff: ['Sing Shong', 'Sleepy-C'],
-            status: 'Reading',
-            rating: 5,
-            tags: ['Action', 'Adventure', 'Apocalypse', 'System'],
-            createdAt: new Date(Date.now() - 800000000),
-            lastReadAt: new Date(Date.now() - 5000000),
-        },
-        {
-            dexId: 'demo-3',
-            title: 'The Beginning After The End',
-            alternativeTitles: ['TBATE'],
-            coverUrl: 'https://uploads.mangadex.org/covers/3e271421-4384-4601-9f93-455c27653713/88c2225f-f06b-4e11-897d-652a23075c13.jpg',
-            author: 'TurtleMe',
-            staff: ['TurtleMe', 'Fuyuki23'],
-            status: 'Reading',
-            rating: 4,
-            tags: ['Fantasy', 'Isekai', 'Reincarnation', 'Magic'],
-            createdAt: new Date(Date.now() - 600000000),
-            lastReadAt: new Date(Date.now() - 100000000),
-        },
-        {
-            dexId: 'demo-4',
-            title: 'Wind Breaker',
-            coverUrl: 'https://uploads.mangadex.org/covers/48d612e5-e5df-4204-98ae-364273574b54/007469a7-9c98-4c6b-9520-22709e992b2d.jpg',
-            author: 'Jo Yongseuk',
-            staff: ['Jo Yongseuk'],
-            status: 'Reading',
-            rating: 5,
-            tags: ['Sports', 'Drama', 'School Life', 'Bicycling'],
-            createdAt: new Date(Date.now() - 400000000),
-            lastReadAt: new Date(Date.now() - 200000),
-        },
-        {
-            dexId: 'demo-5',
-            title: 'Bastard',
-            coverUrl: 'https://uploads.mangadex.org/covers/259dfd8a-f06a-4825-8fa6-a2dcd7274230/9f380126-7440-4595-8868-d62da3c6cf04.jpg',
-            author: 'Carnby Kim',
-            staff: ['Carnby Kim', 'Hwang Youngchan'],
-            status: 'Completed',
-            rating: 5,
-            tags: ['Thriller', 'Psychological', 'Horror', 'Romance'],
-            createdAt: new Date(Date.now() - 200000000),
-            lastReadAt: new Date(Date.now() - 900000000),
-        },
-        {
-             dexId: 'demo-6',
-             title: 'SSS-Class Suicide Hunter',
-             coverUrl: 'https://uploads.mangadex.org/covers/c07b6670-3486-444f-b52e-503a42ce9d03/6987c089-c70e-436f-b257-269603f90117.jpg',
-             author: 'Shin Noah',
-             staff: ['Shin Noah'],
-             status: 'Plan to Read',
-             rating: 0,
-             tags: ['Action', 'Time Travel', 'Tower'],
-             createdAt: new Date(),
-             lastReadAt: new Date(),
-        }
-    ];
+            staff: ['Redice Studio']
+        });
+        
+        await db.scenes.add({
+            manhwaId: Number(mId),
+            chapterNumber: 10,
+            description: "Jin-Woo fights the giant snake boss in the subway station.",
+            characters: ['Jin-Woo'],
+            tags: ['Boss Fight', 'Action'],
+            createdAt: new Date()
+        });
+    });
+    window.location.reload();
+};
 
-    try {
-        await db.manhwas.clear();
-        await db.scenes.clear();
-        
-        for (const m of demoManhwas) {
-            const id = await db.addManhwa(m as Manhwa);
-            
-            // Add Scenes for Solo Leveling
-            if (m.title === 'Solo Leveling') {
-                await db.scenes.add({ manhwaId: id, chapterNumber: 10, description: 'Jin-Woo fights the boss of the instant dungeon.', characters: ['Jin-Woo'], tags: ['Fight', 'Level Up'], createdAt: new Date() });
-                await db.scenes.add({ manhwaId: id, chapterNumber: 45, description: 'Igris is extracted as a shadow soldier.', characters: ['Jin-Woo', 'Igris'], tags: ['Hype', 'Shadows'], createdAt: new Date() });
-                await db.scenes.add({ manhwaId: id, chapterNumber: 105, description: 'Beru fights against the S-Rank hunters.', characters: ['Beru', 'Cha Hae-In'], tags: ['Fight', 'Dominance'], createdAt: new Date() });
-            }
-             // Add Scenes for ORV
-             if (m.title.includes('Omniscient')) {
-                await db.scenes.add({ manhwaId: id, chapterNumber: 1, description: 'The subway ride where it all begins.', characters: ['Kim Dokja', 'Yoo Joonghyuk'], tags: ['Intro', 'Apocalypse'], createdAt: new Date() });
-            }
-        }
-        
-        alert("Demo Data Loaded! Check Library and Analytics.");
-    } catch (e) {
-        console.error(e);
-        alert("Failed to load demo data.");
-    }
+const PresetManager = () => {
+    return (
+        <Card className="p-6 space-y-4">
+             <h2 className="text-xl font-semibold flex items-center gap-2"><Sparkles className="w-5 h-5 text-purple-400" />AI Configuration</h2>
+             <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
+                <p className="text-sm text-slate-400">
+                    AI features are enabled using the API Key from environment variables.
+                    Uses <strong>gemini-2.5-flash</strong> for fast text generation.
+                </p>
+             </div>
+        </Card>
+    );
 };
 
 const SettingsPage = () => {
@@ -1356,6 +999,7 @@ const SettingsPage = () => {
   const [isIframe, setIsIframe] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [canUseFileSystem, setCanUseFileSystem] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -1382,7 +1026,28 @@ const SettingsPage = () => {
         if (themeRec) setCurrentTheme(themeRec.value);
     };
     init();
+
+    // PWA Install Prompt Listener
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   }, []);
+
+  const handleInstallClick = () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    installPrompt.userChoice.then((choiceResult: any) => {
+      if (choiceResult.outcome === 'accepted') {
+        console.log('User accepted the A2HS prompt');
+        setInstallPrompt(null);
+      } else {
+        console.log('User dismissed the A2HS prompt');
+      }
+    });
+  };
 
   const handleLinkFolder = async () => {
     setStatusMsg("Connecting...");
@@ -1469,7 +1134,14 @@ const SettingsPage = () => {
 
   return (
     <div className="max-w-xl mx-auto space-y-8 animate-in fade-in duration-300">
-      <h1 className="text-3xl font-bold">Settings</h1>
+      <div className="flex justify-between items-center">
+        <h1 className="text-3xl font-bold">Settings</h1>
+        {installPrompt && (
+          <Button onClick={handleInstallClick} variant="primary" icon={Download} className="animate-pulse shadow-blue-500/50">
+            Install App
+          </Button>
+        )}
+      </div>
       
       {/* Theme Section */}
       <Card className="p-6 space-y-4">
