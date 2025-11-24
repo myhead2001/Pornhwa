@@ -1031,6 +1031,7 @@ const SettingsPage = () => {
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
       setInstallPrompt(e);
+      console.log("Install prompt captured!");
     };
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -1136,10 +1137,21 @@ const SettingsPage = () => {
     <div className="max-w-xl mx-auto space-y-8 animate-in fade-in duration-300">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Settings</h1>
-        {installPrompt && (
+        
+        {/* PWA Install Button Logic */}
+        {installPrompt ? (
           <Button onClick={handleInstallClick} variant="primary" icon={Download} className="animate-pulse shadow-blue-500/50">
             Install App
           </Button>
+        ) : (
+          <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-800 p-2 rounded-lg border border-slate-700">
+              <Download className="w-4 h-4 opacity-50" />
+              <span>
+                 {window.matchMedia('(display-mode: standalone)').matches 
+                   ? "App Installed" 
+                   : "Install via Browser Menu"}
+              </span>
+          </div>
         )}
       </div>
       
