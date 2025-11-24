@@ -1,0 +1,5 @@
+{
+  "name": "ManhwaLog",
+  "description": "A sophisticated PWA for cataloging Manhwa reading progress, scenes, and analytics with AI integration.",
+  "requestFramePermissions": []
+}
