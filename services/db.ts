@@ -10,8 +10,6 @@ class ManhwaDatabase extends Dexie {
   config!: Table<{ key: string; value: any }>;
 
   private directoryHandle: FileSystemDirectoryHandle | null = null;
-  // Queue to prevent overlapping writes for the same ID
-  private writeQueue: Map<number, Promise<void>> = new Map();
 
   constructor() {
     super('ManhwaLogDB');
@@ -41,14 +39,6 @@ class ManhwaDatabase extends Dexie {
     });
 
     // --- Hooks for Auto-CRUD on File System ---
-    
-    // Manhwa Changes
-    this.manhwas.hook('creating', (primKey, obj) => {
-       // We need the ID to write the file. For auto-increment, primKey might be undefined here 
-       // but accessible in onsuccess. However, we'll rely on the transaction completion or 
-       // explicit calls for 'add'. For updates, it works.
-       // Better approach: Use 'on.complete' of the transaction or just wait a tick.
-    });
     
     this.manhwas.hook('updating', (mods, primKey, obj, trans) => {
       trans.on('complete', () => {
@@ -89,6 +79,60 @@ class ManhwaDatabase extends Dexie {
       return Number(id);
   }
 
+  async deleteManhwa(id: number) {
+      console.log("Attempting to delete manhwa:", id);
+      // Deleting from DB will trigger the hook which attempts to delete from disk.
+      // However, we perform the DB operations in a transaction to ensure consistency.
+      await this.transaction('rw', this.manhwas, this.scenes, async () => {
+          await this.scenes.where('manhwaId').equals(id).delete();
+          await this.manhwas.delete(id);
+      });
+      console.log("Manhwa deleted from DB");
+  }
+
+  async clearAllData() {
+    console.log("Starting clearAllData...");
+    // 1. Clear Disk files explicitly (Hooks don't fire on clear())
+    if (this.directoryHandle) {
+        try {
+           // Ensure permission before attempting
+           await this.requestPermission();
+           
+           const libHandle = await this.getLibraryHandle();
+           if (libHandle) {
+               const filesToDelete: string[] = [];
+               
+               // Collect files first to avoid iterator invalidation
+               // @ts-ignore
+               for await (const entry of (libHandle as any).values()) {
+                   if (entry.kind === 'file') {
+                       filesToDelete.push(entry.name);
+                   }
+               }
+
+               console.log(`Found ${filesToDelete.length} files to delete`);
+
+               // Delete files
+               for (const filename of filesToDelete) {
+                   try {
+                       await libHandle.removeEntry(filename);
+                   } catch (e: any) {
+                       if (e.name !== 'NotFoundError') console.warn(`Failed to delete ${filename}`, e);
+                   }
+               }
+               console.log(`Cleared ${filesToDelete.length} files from disk.`);
+           }
+        } catch(e) { console.error("Error clearing disk files", e); }
+    }
+
+    // 2. Clear DB
+    await this.transaction('rw', this.manhwas, this.scenes, async () => {
+        await this.manhwas.clear();
+        await this.scenes.clear();
+    });
+    console.log("IndexedDB cleared.");
+  }
+
   // --- File System Logic ---
 
   async restoreConnection(): Promise<boolean> {
@@ -99,7 +143,9 @@ class ManhwaDatabase extends Dexie {
         try {
             // Check permission query safely
             const perm = await (this.directoryHandle as any).queryPermission({ mode: 'readwrite' });
-            return perm === 'granted';
+            if (perm === 'granted') return true;
+            // If prompt, we can't auto-request here, user interaction needed later
+            return false;
         } catch (e) {
             console.warn("Error querying permission during restore", e);
             return false;
@@ -237,7 +283,6 @@ class ManhwaDatabase extends Dexie {
   async saveManhwaToDisk(manhwaId: number) {
       if (!this.directoryHandle) return;
 
-      // Debounce/Queue logic could go here, but for now we just await
       try {
           const libHandle = await this.getLibraryHandle();
           if (!libHandle) return;
@@ -302,8 +347,12 @@ class ManhwaDatabase extends Dexie {
               await libHandle.removeEntry(fileToDelete);
               console.log(`Deleted ${fileToDelete} from disk.`);
           }
-      } catch (e) {
-          console.error("Failed to delete file from disk", e);
+      } catch (e: any) {
+          if (e.name === 'NotFoundError') {
+              // Ignore if already deleted
+          } else {
+              console.error("Failed to delete file from disk", e);
+          }
       }
   }
 }

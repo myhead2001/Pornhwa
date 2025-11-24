@@ -6,7 +6,7 @@ import {
   BarChart2, Save, X, Trash2, Wand2, Filter, ChevronRight, Hash, User,
   Star, Edit2, Users, ArrowUp, ArrowDown, Calendar, Clock, SlidersHorizontal,
   FolderOpen, RefreshCw, HardDrive, CheckCircle, AlertCircle, Palette,
-  Home, Tag, Briefcase, ExternalLink
+  Home, Tag, Briefcase, ExternalLink, Beaker, AlertTriangle
 } from 'lucide-react';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend 
@@ -136,9 +136,17 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const [isConnected, setIsConnected] = useState(false);
   
-  // Apply Theme on Load
+  // Apply Theme on Load & Restore DB Connection
   useEffect(() => {
-    const loadTheme = async () => {
+    const init = async () => {
+      // 1. Restore DB Connection for file system access
+      try {
+        await db.restoreConnection();
+      } catch (e) {
+        console.warn("Could not restore DB connection on mount");
+      }
+
+      // 2. Load Theme
       try {
         const record = await db.config.get('app_theme');
         const themeId = record?.value || 'default';
@@ -152,7 +160,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         console.error("Failed to load theme", e);
       }
     };
-    loadTheme();
+    init();
   }, []);
 
   // Check connection status periodically or on mount
@@ -218,6 +226,49 @@ const Card: React.FC<{ children?: React.ReactNode; className?: string }> = ({ ch
   </div>
 );
 
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+  icon?: React.ElementType;
+}
+
+const Button: React.FC<ButtonProps> = ({ 
+  children, onClick, variant = 'primary', icon: Icon, disabled = false, className = '', type = 'button', ...props 
+}) => {
+  const baseStyle = "flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
+  const variants = {
+    primary: "bg-blue-600 hover:bg-blue-700 text-white",
+    secondary: "bg-slate-700 hover:bg-slate-600 text-slate-200",
+    danger: "bg-red-500/10 text-red-400 hover:bg-red-500/20",
+    ghost: "bg-transparent hover:bg-slate-800 text-slate-400 hover:text-slate-200"
+  };
+
+  return (
+    <button type={type} onClick={onClick} disabled={disabled} className={`${baseStyle} ${variants[variant]} ${className}`} {...props}>
+      {Icon && <Icon className="w-4 h-4" />}
+      {children}
+    </button>
+  );
+};
+
+const ConfirmationModal = ({ isOpen, title, message, onConfirm, onCancel, confirmText = "Confirm", cancelText = "Cancel" }: any) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+      <Card className="w-full max-w-sm p-6 space-y-4 bg-slate-900 border-slate-700 shadow-2xl">
+        <div className="flex items-center gap-3 text-red-400">
+          <AlertTriangle className="w-6 h-6" />
+          <h3 className="text-xl font-bold text-white">{title}</h3>
+        </div>
+        <p className="text-slate-300 leading-relaxed">{message}</p>
+        <div className="flex justify-end gap-3 pt-2">
+          <Button variant="ghost" onClick={onCancel}>{cancelText}</Button>
+          <Button variant="danger" onClick={onConfirm}>{confirmText}</Button>
+        </div>
+      </Card>
+    </div>
+  );
+};
+
 const Badge: React.FC<{ 
   children?: React.ReactNode; 
   color?: string; 
@@ -244,30 +295,6 @@ const Badge: React.FC<{
     )}
   </span>
 );
-
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
-  icon?: React.ElementType;
-}
-
-const Button: React.FC<ButtonProps> = ({ 
-  children, onClick, variant = 'primary', icon: Icon, disabled = false, className = '', ...props 
-}) => {
-  const baseStyle = "flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
-  const variants = {
-    primary: "bg-blue-600 hover:bg-blue-700 text-white",
-    secondary: "bg-slate-700 hover:bg-slate-600 text-slate-200",
-    danger: "bg-red-500/10 text-red-400 hover:bg-red-500/20",
-    ghost: "bg-transparent hover:bg-slate-800 text-slate-400 hover:text-slate-200"
-  };
-
-  return (
-    <button onClick={onClick} disabled={disabled} className={`${baseStyle} ${variants[variant]} ${className}`} {...props}>
-      {Icon && <Icon className="w-4 h-4" />}
-      {children}
-    </button>
-  );
-};
 
 const StarRating: React.FC<{ rating: number }> = ({ rating }) => {
   return (
@@ -489,7 +516,10 @@ const LibraryPage = () => {
         <div className="flex flex-col items-center justify-center py-20 text-slate-500">
           <BookOpen className="w-16 h-16 mb-4 opacity-20" />
           <p>No Manhwas found matching your criteria.</p>
-          <Button variant="ghost" onClick={clearFilters} className="mt-4 text-blue-400">Clear Filters</Button>
+          <div className="flex gap-4 mt-4">
+            <Button variant="ghost" onClick={clearFilters} className="text-blue-400">Clear Filters</Button>
+            <Link to="/settings"><Button variant="secondary" className="text-xs">Go to Settings to Load Demo Data</Button></Link>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
@@ -575,7 +605,7 @@ const SearchPage = () => {
           className="w-full bg-slate-800 border border-slate-700 text-white p-4 pl-12 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none placeholder:text-slate-500"
         />
         <Search className="absolute left-4 top-4 text-slate-500 w-5 h-5" />
-        <Button className="absolute right-2 top-2" variant="primary" disabled={loading}>{loading ? 'Searching...' : 'Search'}</Button>
+        <Button className="absolute right-2 top-2" variant="primary" disabled={loading} type="submit">{loading ? 'Searching...' : 'Search'}</Button>
       </form>
 
       <div className="space-y-4">
@@ -630,6 +660,7 @@ const ManhwaDetailPage = () => {
   const [editingScene, setEditingScene] = useState<Scene | null>(null);
   const [filterChar, setFilterChar] = useState('');
   const [filterTag, setFilterTag] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const filteredScenes = useMemo(() => {
     if (!scenes) return [];
@@ -646,13 +677,26 @@ const ManhwaDetailPage = () => {
 
   if (!manhwa) return <div className="p-8 text-center">Loading...</div>;
 
-  const handleDelete = async () => {
-    if(confirm("Are you sure you want to delete this Manhwa and all its scenes?")) {
-        await db.manhwas.delete(manhwaId);
-        await db.scenes.where('manhwaId').equals(manhwaId).delete();
+  const handleDeleteClick = () => {
+     if (!manhwaId) {
+        alert("Error: Invalid Manhwa ID");
+        return;
+     }
+     setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    try {
+        console.log(`Starting deletion for Manhwa ID: ${manhwaId}`);
+        await db.deleteManhwa(manhwaId);
+        console.log("Deleted successfully");
+        setShowDeleteConfirm(false);
         navigate('/');
+    } catch (e) {
+        console.error("Delete failed", e);
+        alert("Failed to delete. Check console.");
     }
-  }
+  };
 
   const filterByStaff = (name: string) => navigate(`/?type=staff&value=${encodeURIComponent(name)}`);
   const filterByTag = (tag: string) => navigate(`/?type=tag&value=${encodeURIComponent(tag)}`);
@@ -699,7 +743,7 @@ const ManhwaDetailPage = () => {
           </div>
           <div className="flex gap-3 pt-4 border-t border-slate-700/50 mt-4">
             <Button onClick={() => setIsEditModalOpen(true)} variant="secondary" icon={Edit2}>Edit Details</Button>
-             <Button onClick={handleDelete} variant="danger" icon={Trash2}>Delete</Button>
+             <Button onClick={handleDeleteClick} variant="danger" icon={Trash2}>Delete</Button>
           </div>
         </div>
       </div>
@@ -754,6 +798,15 @@ const ManhwaDetailPage = () => {
           )}
         </div>
       </div>
+
+      <ConfirmationModal 
+         isOpen={showDeleteConfirm}
+         title="Delete Manhwa"
+         message="Are you sure you want to delete this Manhwa and all its scenes? This action cannot be undone."
+         onCancel={() => setShowDeleteConfirm(false)}
+         onConfirm={confirmDelete}
+         confirmText="Delete Forever"
+      />
 
       {isSceneFormOpen && (
         <SceneFormModal manhwa={manhwa} sceneToEdit={editingScene} onClose={() => setIsSceneFormOpen(false)} />
@@ -862,7 +915,7 @@ const ManhwaMetadataModal = ({ initialData, onClose, onSubmit }: { initialData?:
                     </div>
                     
                     <div><label className="block text-sm text-slate-400 mb-1">Cover Image URL</label><input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" value={coverUrl} onChange={e => setCoverUrl(e.target.value)} placeholder="https://..." /><p className="text-[10px] text-slate-500 mt-1">Leave empty for random placeholder.</p></div>
-                    <div className="pt-4 flex justify-end gap-3 border-t border-slate-700 mt-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button className="w-32">{initialData ? 'Save Changes' : 'Add Manhwa'}</Button></div>
+                    <div className="pt-4 flex justify-end gap-3 border-t border-slate-700 mt-2"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" className="w-32">{initialData ? 'Save Changes' : 'Add Manhwa'}</Button></div>
                 </form>
             </div>
         </div>
@@ -916,7 +969,7 @@ const SceneFormModal = ({ manhwa, sceneToEdit, onClose }: { manhwa: Manhwa, scen
           <div><div className="flex justify-between mb-1"><label className="block text-sm text-slate-400">Description</label><button type="button" onClick={handleAiGenerate} disabled={aiLoading} className="text-xs flex items-center gap-1 text-blue-400 hover:text-blue-300 disabled:opacity-50"><Wand2 className="w-3 h-3" />{aiLoading ? 'Magic...' : 'AI Enhance'}</button></div><textarea rows={4} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" placeholder="What happened? E.g. 'Jin-Woo summons Igris for the first time...'" value={desc} onChange={e => setDesc(e.target.value)} /></div>
           <div><label className="block text-sm text-slate-400 mb-1">Characters (comma separated)</label><input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" placeholder="e.g. Jin-Woo, Cha Hae-In" value={chars} onChange={e => setChars(e.target.value)} /></div>
           <div><label className="block text-sm text-slate-400 mb-1">Tags (comma separated)</label><input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-sm" placeholder="e.g. Fight, Fluff, Cliffhanger" value={tags} onChange={e => setTags(e.target.value)} /></div>
-          <div className="pt-4 flex justify-end gap-3"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button className="w-24">Save</Button></div>
+          <div className="pt-4 flex justify-end gap-3"><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button type="submit" className="w-24">Save</Button></div>
         </form>
       </div>
     </div>
@@ -1044,11 +1097,118 @@ const PresetManager = () => {
   );
 };
 
+// --- Test/Demo Utilities ---
+const generateDemoData = async () => {
+    const demoManhwas: Omit<Manhwa, 'id'>[] = [
+        {
+            dexId: 'demo-1',
+            title: 'Solo Leveling',
+            alternativeTitles: ['Na Honjaman Level Up', 'I Alone Level Up'],
+            coverUrl: 'https://uploads.mangadex.org/covers/32d76d19-8a05-4db0-9fc2-e0b0648fe9d0/8f30327f-38d5-4422-92e1-4c6007559c5d.jpg',
+            author: 'Chugong',
+            staff: ['Chugong', 'Redice Studio', 'Dubu'],
+            status: 'Completed',
+            rating: 5,
+            tags: ['Action', 'Adventure', 'Fantasy', 'System', 'Supernatural'],
+            createdAt: new Date(Date.now() - 1000000000),
+            lastReadAt: new Date(),
+        },
+        {
+            dexId: 'demo-2',
+            title: 'Omniscient Reader\'s Viewpoint',
+            alternativeTitles: ['ORV', 'Jeonjijeok Dokja Sijeom'],
+            coverUrl: 'https://uploads.mangadex.org/covers/b980e0cb-469b-4654-94fe-6f41432f89f5/c405908a-234b-47e0-b962-430c496e95c1.jpg',
+            author: 'Sing Shong',
+            staff: ['Sing Shong', 'Sleepy-C'],
+            status: 'Reading',
+            rating: 5,
+            tags: ['Action', 'Adventure', 'Apocalypse', 'System'],
+            createdAt: new Date(Date.now() - 800000000),
+            lastReadAt: new Date(Date.now() - 5000000),
+        },
+        {
+            dexId: 'demo-3',
+            title: 'The Beginning After The End',
+            alternativeTitles: ['TBATE'],
+            coverUrl: 'https://uploads.mangadex.org/covers/3e271421-4384-4601-9f93-455c27653713/88c2225f-f06b-4e11-897d-652a23075c13.jpg',
+            author: 'TurtleMe',
+            staff: ['TurtleMe', 'Fuyuki23'],
+            status: 'Reading',
+            rating: 4,
+            tags: ['Fantasy', 'Isekai', 'Reincarnation', 'Magic'],
+            createdAt: new Date(Date.now() - 600000000),
+            lastReadAt: new Date(Date.now() - 100000000),
+        },
+        {
+            dexId: 'demo-4',
+            title: 'Wind Breaker',
+            coverUrl: 'https://uploads.mangadex.org/covers/48d612e5-e5df-4204-98ae-364273574b54/007469a7-9c98-4c6b-9520-22709e992b2d.jpg',
+            author: 'Jo Yongseuk',
+            staff: ['Jo Yongseuk'],
+            status: 'Reading',
+            rating: 5,
+            tags: ['Sports', 'Drama', 'School Life', 'Bicycling'],
+            createdAt: new Date(Date.now() - 400000000),
+            lastReadAt: new Date(Date.now() - 200000),
+        },
+        {
+            dexId: 'demo-5',
+            title: 'Bastard',
+            coverUrl: 'https://uploads.mangadex.org/covers/259dfd8a-f06a-4825-8fa6-a2dcd7274230/9f380126-7440-4595-8868-d62da3c6cf04.jpg',
+            author: 'Carnby Kim',
+            staff: ['Carnby Kim', 'Hwang Youngchan'],
+            status: 'Completed',
+            rating: 5,
+            tags: ['Thriller', 'Psychological', 'Horror', 'Romance'],
+            createdAt: new Date(Date.now() - 200000000),
+            lastReadAt: new Date(Date.now() - 900000000),
+        },
+        {
+             dexId: 'demo-6',
+             title: 'SSS-Class Suicide Hunter',
+             coverUrl: 'https://uploads.mangadex.org/covers/c07b6670-3486-444f-b52e-503a42ce9d03/6987c089-c70e-436f-b257-269603f90117.jpg',
+             author: 'Shin Noah',
+             staff: ['Shin Noah'],
+             status: 'Plan to Read',
+             rating: 0,
+             tags: ['Action', 'Time Travel', 'Tower'],
+             createdAt: new Date(),
+             lastReadAt: new Date(),
+        }
+    ];
+
+    try {
+        await db.manhwas.clear();
+        await db.scenes.clear();
+        
+        for (const m of demoManhwas) {
+            const id = await db.addManhwa(m as Manhwa);
+            
+            // Add Scenes for Solo Leveling
+            if (m.title === 'Solo Leveling') {
+                await db.scenes.add({ manhwaId: id, chapterNumber: 10, description: 'Jin-Woo fights the boss of the instant dungeon.', characters: ['Jin-Woo'], tags: ['Fight', 'Level Up'], createdAt: new Date() });
+                await db.scenes.add({ manhwaId: id, chapterNumber: 45, description: 'Igris is extracted as a shadow soldier.', characters: ['Jin-Woo', 'Igris'], tags: ['Hype', 'Shadows'], createdAt: new Date() });
+                await db.scenes.add({ manhwaId: id, chapterNumber: 105, description: 'Beru fights against the S-Rank hunters.', characters: ['Beru', 'Cha Hae-In'], tags: ['Fight', 'Dominance'], createdAt: new Date() });
+            }
+             // Add Scenes for ORV
+             if (m.title.includes('Omniscient')) {
+                await db.scenes.add({ manhwaId: id, chapterNumber: 1, description: 'The subway ride where it all begins.', characters: ['Kim Dokja', 'Yoo Joonghyuk'], tags: ['Intro', 'Apocalypse'], createdAt: new Date() });
+            }
+        }
+        
+        alert("Demo Data Loaded! Check Library and Analytics.");
+    } catch (e) {
+        console.error(e);
+        alert("Failed to load demo data.");
+    }
+};
+
 const SettingsPage = () => {
   const [folderLinked, setFolderLinked] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
   const [currentTheme, setCurrentTheme] = useState('default');
   const [isIframe, setIsIframe] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   useEffect(() => {
     // Check if running in iframe
@@ -1114,6 +1274,19 @@ const SettingsPage = () => {
     Object.entries(theme.colors).forEach(([key, value]) => {
        root.style.setProperty(key, value);
     });
+  };
+
+  const confirmClearDatabase = async () => {
+      try {
+          console.log("Executing clearAllData...");
+          await db.clearAllData();
+          console.log("Done.");
+          setShowClearConfirm(false);
+          alert("Database cleared successfully.");
+      } catch (e) {
+          console.error("Clear failed", e);
+          alert("Failed to clear data.");
+      }
   };
 
   return (
@@ -1185,7 +1358,32 @@ const SettingsPage = () => {
              ) : (<div className="text-xs text-slate-400 text-center"><p>{statusMsg}</p></div>)}
         </div>
       </Card>
-      <div className="text-center text-slate-600 text-sm"><p>ManhwaLog v1.2.0 (File Per Item)</p></div>
+
+      {/* Developer / Testing Zone */}
+      <Card className="p-6 space-y-4 border-slate-700/50 bg-slate-850/50">
+        <h2 className="text-xl font-semibold flex items-center gap-2 text-slate-400"><Beaker className="w-5 h-5" />Developer Zone</h2>
+        <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+                <p className="text-xs text-slate-500">Populate the app with sample Manhwas, Scenes, and History to test filtering and analytics.</p>
+                <Button onClick={generateDemoData} variant="secondary" className="w-full border border-slate-600 hover:bg-slate-700">Load Demo Data</Button>
+            </div>
+            <div className="space-y-2">
+                <p className="text-xs text-slate-500">Wipe the entire local database. This cannot be undone.</p>
+                <Button onClick={() => setShowClearConfirm(true)} variant="danger" className="w-full">Clear Database</Button>
+            </div>
+        </div>
+      </Card>
+
+      <ConfirmationModal 
+         isOpen={showClearConfirm}
+         title="Clear Database"
+         message="WARNING: This will delete ALL data from the app AND the linked local folder. This action cannot be undone."
+         onCancel={() => setShowClearConfirm(false)}
+         onConfirm={confirmClearDatabase}
+         confirmText="Delete Everything"
+      />
+
+      <div className="text-center text-slate-600 text-sm"><p>ManhwaLog v1.2.2 (File Per Item)</p></div>
     </div>
   );
 };
