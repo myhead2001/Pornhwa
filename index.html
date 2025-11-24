@@ -5,21 +5,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#0f172a" />
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="manifest" href="manifest.json" />
+    <meta name="description" content="ManhwaLog - Your offline reading library">
+    <link rel="icon" type="image/svg+xml" href="https://cdn.jsdelivr.net/npm/lucide-static@0.427.0/icons/book-open.svg" />
     <title>ManhwaLog</title>
+    
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Default Theme Variables (Slate/Blue) -->
     <style id="theme-vars">
       :root {
-        /* Backgrounds (Slate) */
         --bg-900: 15 23 42;
         --bg-850: 30 41 59;
         --bg-800: 30 41 59;
-        --bg-750: 40 55 75; /* Custom intermediate */
+        --bg-750: 40 55 75;
         --bg-700: 51 65 85;
         --bg-600: 71 85 105;
         --bg-500: 100 116 139;
@@ -28,7 +25,6 @@
         --bg-200: 226 232 240;
         --bg-100: 241 245 249;
 
-        /* Primary/Accent (Blue) */
         --p-900: 30 58 138;
         --p-800: 30 64 175;
         --p-700: 29 78 216;
@@ -38,16 +34,14 @@
         --p-300: 147 197 253;
       }
     </style>
-
     <script>
       tailwind.config = {
         darkMode: 'class',
         theme: {
           extend: {
             colors: {
-              // Map Slate to Background Variables
               slate: {
-                50: 'rgb(var(--bg-100) / <alpha-value>)', // Mapping 50 to 100 for safety
+                50: 'rgb(var(--bg-100) / <alpha-value>)',
                 100: 'rgb(var(--bg-100) / <alpha-value>)',
                 200: 'rgb(var(--bg-200) / <alpha-value>)',
                 300: 'rgb(var(--bg-300) / <alpha-value>)',
@@ -55,13 +49,12 @@
                 500: 'rgb(var(--bg-500) / <alpha-value>)',
                 600: 'rgb(var(--bg-600) / <alpha-value>)',
                 700: 'rgb(var(--bg-700) / <alpha-value>)',
-                750: 'rgb(var(--bg-750) / <alpha-value>)', // Custom
+                750: 'rgb(var(--bg-750) / <alpha-value>)',
                 800: 'rgb(var(--bg-800) / <alpha-value>)',
                 850: 'rgb(var(--bg-850) / <alpha-value>)',
                 900: 'rgb(var(--bg-900) / <alpha-value>)',
                 950: 'rgb(var(--bg-900) / <alpha-value>)'
               },
-              // Map Blue to Primary Variables
               blue: {
                 300: 'rgb(var(--p-300) / <alpha-value>)',
                 400: 'rgb(var(--p-400) / <alpha-value>)',
@@ -72,9 +65,7 @@
                 900: 'rgb(var(--p-900) / <alpha-value>)'
               }
             },
-            screens: {
-              'xs': '400px',
-            }
+            screens: { 'xs': '400px' }
           }
         }
       }
@@ -83,58 +74,31 @@
       body {
         @apply bg-slate-900 text-slate-100;
         transition: background-color 0.3s ease, color 0.3s ease;
-        overscroll-behavior-y: none; /* Prevent pull-to-refresh on Android */
-        -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
+        overscroll-behavior-y: none;
+        -webkit-tap-highlight-color: transparent;
         touch-action: manipulation;
       }
-      
-      /* Disable text selection on UI elements for app-feel */
-      button, nav, .card-interactive {
-        user-select: none;
-      }
-
-      /* Safe area spacing for mobile nav */
-      .safe-pb {
-        padding-bottom: env(safe-area-inset-bottom, 20px);
-      }
-
-      /* Custom scrollbar for webkit */
-      ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-      }
-      ::-webkit-scrollbar-track {
-        background: rgb(var(--bg-900)); 
-      }
-      ::-webkit-scrollbar-thumb {
-        background: rgb(var(--bg-700)); 
-        border-radius: 4px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: rgb(var(--bg-600)); 
-      }
+      button, nav, .card-interactive { user-select: none; }
+      .safe-pb { padding-bottom: env(safe-area-inset-bottom, 20px); }
+      ::-webkit-scrollbar { width: 8px; height: 8px; }
+      ::-webkit-scrollbar-track { background: rgb(var(--bg-900)); }
+      ::-webkit-scrollbar-thumb { background: rgb(var(--bg-700)); border-radius: 4px; }
     </style>
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
-          .then(reg => console.log('SW registered'))
-          .catch(err => console.log('SW failed', err));
-      });
-    }
-  </script>
   <script type="importmap">
 {
   "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "dexie": "https://aistudiocdn.com/dexie@^4.2.1",
     "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
     "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.9.6",
     "dexie-react-hooks": "https://aistudiocdn.com/dexie-react-hooks@^4.2.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
     "recharts": "https://aistudiocdn.com/recharts@^3.5.0",
-    "dexie": "https://aistudiocdn.com/dexie@^4.2.1"
+    "vite": "https://aistudiocdn.com/vite@^7.2.4",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
+    "vite-plugin-pwa": "https://aistudiocdn.com/vite-plugin-pwa@^1.1.0"
   }
 }
 </script>
